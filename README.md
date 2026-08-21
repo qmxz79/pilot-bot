@@ -4,11 +4,11 @@
 
 ## 项目状态
 
-**M0 里程碑完成（工程骨架 + 高德导航 SDK 集成），待真机验收。**
+**M1 核心闭环完成（代码）：播报 → 情境构建 → LLM 流式改写 → 流式 TTS。待真机验收。**
 
 - 代码：`android/`（包名 `com.qmxz.pilotbot`）
 - 设计：`DESIGN.md`
-- 里程碑交付与验收清单：`docs/M0-DELIVERY.md`
+- M0 交付与验收清单：`docs/M0-DELIVERY.md`
 
 ## 功能规划
 
@@ -23,8 +23,14 @@
 ```
 android/                  Android 工程
   app/src/main/java/com/qmxz/pilotbot/
-    MainActivity.kt       测试界面（开始/停止导航、状态显示）
+    MainActivity.kt       测试界面（导航 + 模拟播报 + 设置入口）
+    SettingsActivity.kt   设置（模型端点 + 人设）
     navi/                 导航数据层（coordinator 架构）
+    context/              情境构建层（播报分类 → 结构化事件）
+    llm/                  大模型对话层（OpenAI 兼容 SSE 流式）
+    tts/                  语音层（系统 TTS）
+    copilot/              编排层（M1 核心闭环）
+    config/  persona/     配置与人设
 docs/                     项目文档
 DESIGN.md                 设计文档
 ```

@@ -57,4 +57,6 @@ dependencies {
     implementation(libs.constraintlayout)
     implementation(libs.amap.navi._3dmap)
     implementation(libs.amap.location)
+    implementation(libs.okhttp)
+    implementation(libs.kotlinx.coroutines.android)
 }

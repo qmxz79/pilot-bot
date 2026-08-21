@@ -13,4 +13,20 @@
     <string name="navi_error_format">导航错误（%1$d）：%2$s</string>
     <string name="status_arrived">已到达目的地</string>
     <string name="unknown_road">未知道路</string>
+
+    <string name="open_settings">设置</string>
+    <string name="simulate_broadcast">模拟播报</string>
+    <string name="copilot_default">副驾还没说话…</string>
+    <string name="simulated_broadcast_text">前方 3 公里拥堵，预计通行 6 分钟</string>
+
+    <string name="settings_title">副驾设置</string>
+    <string name="settings_model_section">模型（OpenAI 兼容）</string>
+    <string name="settings_base_url_hint">base_url，如 https://api.deepseek.com/v1</string>
+    <string name="settings_api_key_hint">API Key</string>
+    <string name="settings_model_hint">模型名，如 deepseek-chat</string>
+    <string name="settings_persona_section">副驾人设</string>
+    <string name="settings_name_hint">名字</string>
+    <string name="settings_tone_hint">语气，如 轻松、活泼、像朋友</string>
+    <string name="settings_catchphrase_hint">口头禅（可留空）</string>
+    <string name="settings_save">保存</string>
 </resources>

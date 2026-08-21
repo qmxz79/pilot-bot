@@ -1,6 +1,7 @@
 package com.qmxz.pilotbot
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
@@ -10,22 +11,29 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
+import com.qmxz.pilotbot.config.AppConfig
+import com.qmxz.pilotbot.copilot.CopilotEngine
+import com.qmxz.pilotbot.llm.OpenAiCompatibleProvider
 import com.qmxz.pilotbot.navi.AmapNavigationProvider
 import com.qmxz.pilotbot.navi.GeoPoint
 import com.qmxz.pilotbot.navi.NaviError
 import com.qmxz.pilotbot.navi.NaviEventListener
 import com.qmxz.pilotbot.navi.NaviState
 import com.qmxz.pilotbot.navi.RoutePlan
+import com.qmxz.pilotbot.tts.AndroidTextToSpeech
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
 
-/** Minimal harness backed by the process-wide coordinator through one reusable facade. */
+/** Harness: real Amap navigation plus the M1 copilot loop (broadcast -> rewrite -> speak). */
 class MainActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
+    private lateinit var copilotText: TextView
     private lateinit var startButton: MaterialButton
     private lateinit var stopButton: MaterialButton
     private lateinit var navigationProvider: AmapNavigationProvider
+    private lateinit var copilot: CopilotEngine
+    private lateinit var tts: AndroidTextToSpeech
     private val mainHandler = Handler(Looper.getMainLooper())
 
     @Volatile
@@ -43,6 +51,7 @@ class MainActivity : AppCompatActivity() {
 
         override fun onNaviText(text: String) = renderOnMain {
             statusText.text = getString(R.string.navi_text_format, text)
+            copilot.speakAbout(text)
         }
 
         override fun onRouteCalculated(route: RoutePlan) = renderOnMain {
@@ -71,8 +80,24 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         statusText = findViewById(R.id.statusText)
+        copilotText = findViewById(R.id.copilotText)
         startButton = findViewById(R.id.startNavigationButton)
         stopButton = findViewById(R.id.stopNavigationButton)
+        findViewById<MaterialButton>(R.id.simulateButton).setOnClickListener {
+            copilot.speakAbout(getString(R.string.simulated_broadcast_text))
+        }
+        findViewById<MaterialButton>(R.id.settingsButton).setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+
+        tts = AndroidTextToSpeech(applicationContext)
+        copilot = CopilotEngine(
+            config = AppConfig(applicationContext),
+            llm = OpenAiCompatibleProvider(),
+            tts = tts,
+            onCopilotText = { text -> renderOnMain { copilotText.text = text } },
+        )
+
         navigationProvider = AmapNavigationProvider(applicationContext)
         navigationProvider.addListener(naviListener)
         startButton.setOnClickListener { requestLocationThenStartNavigation() }
@@ -154,6 +179,8 @@ class MainActivity : AppCompatActivity() {
         destroyed = true
         mainHandler.removeCallbacksAndMessages(null)
         navigationProvider.removeListener(naviListener)
+        copilot.close()
+        tts.shutdown()
         super.onDestroy()
     }
 
