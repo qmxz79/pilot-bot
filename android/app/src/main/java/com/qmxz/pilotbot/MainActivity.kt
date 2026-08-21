@@ -1,0 +1,163 @@
+package com.qmxz.pilotbot
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.google.android.material.button.MaterialButton
+import com.qmxz.pilotbot.navi.AmapNavigationProvider
+import com.qmxz.pilotbot.navi.GeoPoint
+import com.qmxz.pilotbot.navi.NaviError
+import com.qmxz.pilotbot.navi.NaviEventListener
+import com.qmxz.pilotbot.navi.NaviState
+import com.qmxz.pilotbot.navi.RoutePlan
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.coroutines.startCoroutine
+
+/** Minimal harness backed by the process-wide coordinator through one reusable facade. */
+class MainActivity : AppCompatActivity() {
+    private lateinit var statusText: TextView
+    private lateinit var startButton: MaterialButton
+    private lateinit var stopButton: MaterialButton
+    private lateinit var navigationProvider: AmapNavigationProvider
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    @Volatile
+    private var destroyed = false
+
+    private val naviListener = object : NaviEventListener {
+        override fun onNaviStateChanged(state: NaviState) = renderOnMain {
+            statusText.text = getString(
+                R.string.navi_state_format,
+                state.remainingDistanceMeters,
+                state.remainingTimeSeconds,
+                state.currentRoadName ?: getString(R.string.unknown_road),
+            )
+        }
+
+        override fun onNaviText(text: String) = renderOnMain {
+            statusText.text = getString(R.string.navi_text_format, text)
+        }
+
+        override fun onRouteCalculated(route: RoutePlan) = renderOnMain {
+            statusText.text = getString(
+                R.string.route_calculated_format,
+                route.totalDistanceMeters ?: 0,
+                route.totalTimeSeconds ?: 0,
+            )
+        }
+
+        override fun onArrived() = renderOnMain {
+            statusText.setText(R.string.status_arrived)
+            startButton.isEnabled = true
+            stopButton.isEnabled = false
+        }
+
+        override fun onNaviError(error: NaviError) = renderOnMain {
+            statusText.text = getString(R.string.navi_error_format, error.code, error.message)
+            startButton.isEnabled = true
+            stopButton.isEnabled = false
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        statusText = findViewById(R.id.statusText)
+        startButton = findViewById(R.id.startNavigationButton)
+        stopButton = findViewById(R.id.stopNavigationButton)
+        navigationProvider = AmapNavigationProvider(applicationContext)
+        navigationProvider.addListener(naviListener)
+        startButton.setOnClickListener { requestLocationThenStartNavigation() }
+        stopButton.setOnClickListener { stopCurrentNavigation() }
+    }
+
+    private fun requestLocationThenStartNavigation() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            startTestNavigation()
+        } else {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                LOCATION_PERMISSION_REQUEST,
+            )
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == LOCATION_PERMISSION_REQUEST &&
+            grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+        ) {
+            startTestNavigation()
+        } else if (requestCode == LOCATION_PERMISSION_REQUEST) {
+            statusText.setText(R.string.location_permission_required)
+        }
+    }
+
+    private fun startTestNavigation() {
+        startButton.isEnabled = false
+        stopButton.isEnabled = true
+        statusText.setText(R.string.status_calculating_route)
+        val route = RoutePlan(
+            start = GeoPoint(longitude = 116.3913, latitude = 39.9075),
+            destination = GeoPoint(longitude = 116.397428, latitude = 39.90923),
+        )
+        suspend { navigationProvider.startNavi(route) }.startCoroutine(handleCompletion)
+    }
+
+    private fun stopCurrentNavigation() {
+        stopButton.isEnabled = false
+        startButton.isEnabled = true
+        statusText.setText(R.string.status_navigation_stopped)
+        suspend { navigationProvider.stopNavi() }.startCoroutine(handleCompletion)
+    }
+
+    private val handleCompletion = object : Continuation<Unit> {
+        override val context = EmptyCoroutineContext
+
+        override fun resumeWith(result: Result<Unit>) {
+            result.exceptionOrNull()?.let { error ->
+                renderOnMain {
+                    statusText.text = getString(
+                        R.string.navi_error_format,
+                        -1,
+                        error.message ?: error.javaClass.simpleName,
+                    )
+                    startButton.isEnabled = true
+                    stopButton.isEnabled = false
+                }
+            }
+        }
+    }
+
+    private fun renderOnMain(block: () -> Unit) {
+        mainHandler.post {
+            if (!destroyed && !isFinishing && !isDestroyed) block()
+        }
+    }
+
+    override fun onDestroy() {
+        destroyed = true
+        mainHandler.removeCallbacksAndMessages(null)
+        navigationProvider.removeListener(naviListener)
+        super.onDestroy()
+    }
+
+    private companion object {
+        const val LOCATION_PERMISSION_REQUEST = 1001
+    }
+}

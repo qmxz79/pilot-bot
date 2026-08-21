@@ -1,0 +1,10 @@
+# Machine-specific SDK path and AMap key
+local.properties
+
+# Gradle and Android build output
+.gradle/
+build/
+
+# IDE metadata
+.idea/
+*.iml

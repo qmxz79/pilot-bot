@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">副驾伴侣</string>
+    <string name="status_ready">副驾伴侣已准备就绪</string>
+    <string name="start_test_navigation">开始测试导航</string>
+    <string name="stop_navigation">停止导航</string>
+    <string name="status_calculating_route">正在计算前往天安门的路线…</string>
+    <string name="status_navigation_stopped">导航已停止</string>
+    <string name="location_permission_required">需要精确定位权限才能开始 GPS 导航</string>
+    <string name="route_calculated_format">路线已计算：%1$d 米，约 %2$d 秒；正在启动 GPS 导航</string>
+    <string name="navi_state_format">剩余 %1$d 米 · %2$d 秒\n当前道路：%3$s</string>
+    <string name="navi_text_format">导航播报：%1$s</string>
+    <string name="navi_error_format">导航错误（%1$d）：%2$s</string>
+    <string name="status_arrived">已到达目的地</string>
+    <string name="unknown_road">未知道路</string>
+</resources>

@@ -1,0 +1,24 @@
+# Local Android SDK and API-key configuration
+android/local.properties
+
+# Gradle and Android build output
+.gradle/
+**/.gradle/
+build/
+**/build/
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+
+# Local machine files
+local.properties
+.DS_Store
+
+# 开发机环境维护（dsh harness 相关，含本机绝对路径，不属于项目、不入库）
+fix-dsh-freeze.sh
+restart-dsh-web.sh
+docs/freeze-fix.md
+docs/dsh-subagent-gpt-patch.yml
+docs/agent-presets/
+subagent-model-fix/
