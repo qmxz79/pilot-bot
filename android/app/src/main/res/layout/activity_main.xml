@@ -22,18 +22,41 @@
             android:id="@+id/copilotText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="12dp"
             android:gravity="center"
             android:text="@string/copilot_default"
             android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
             android:textIsSelectable="true" />
 
+        <ScrollView
+            android:id="@+id/transcriptScroll"
+            android:layout_width="match_parent"
+            android:layout_height="160dp"
+            android:layout_marginTop="12dp"
+            android:background="@android:drawable/edit_text">
+
+            <TextView
+                android:id="@+id/transcriptText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="8dp"
+                android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                android:textIsSelectable="true" />
+        </ScrollView>
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/simulateButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
+            android:layout_marginTop="16dp"
             android:text="@string/simulate_broadcast" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/micButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/mic_button" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/startNavigationButton"

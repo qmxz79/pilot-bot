@@ -10,6 +10,9 @@ interface TextToSpeech {
 
     /** Releases the underlying engine. */
     fun shutdown()
+
+    /** Fires once the playback queue drains to empty (used to resume listening in half-duplex). */
+    fun setOnIdle(callback: () -> Unit)
 }
 
 /**

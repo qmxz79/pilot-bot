@@ -1,7 +1,8 @@
 package com.qmxz.pilotbot.persona
 
-/** The single editable copilot persona used to build the system prompt. */
+/** A copilot persona used to build the system prompt. */
 data class Persona(
+    val id: String,
     val name: String,
     val tone: String,
     val catchphrase: String,

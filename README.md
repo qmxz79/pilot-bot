@@ -4,7 +4,7 @@
 
 ## 项目状态
 
-**M1 核心闭环完成（代码）：播报 → 情境构建 → LLM 流式改写 → 流式 TTS。待真机验收。**
+**M2+ 聊天闭环 + 全模块骨架完成（代码）：语音交互（按键/连续/唤醒词三模式可切换）、多轮历史、人设预设、安全策略/沿途数据骨架。待真机验收（重点：语音模式选型）。**
 
 - 代码：`android/`（包名 `com.qmxz.pilotbot`）
 - 设计：`DESIGN.md`
@@ -23,14 +23,18 @@
 ```
 android/                  Android 工程
   app/src/main/java/com/qmxz/pilotbot/
-    MainActivity.kt       测试界面（导航 + 模拟播报 + 设置入口）
-    SettingsActivity.kt   设置（模型端点 + 人设）
+    MainActivity.kt       测试界面（导航 + 模拟播报 + 说话 + 对话记录 + 设置入口）
+    SettingsActivity.kt   设置（模型端点 + 人设预设 + 语音模式）
     navi/                 导航数据层（coordinator 架构）
     context/              情境构建层（播报分类 → 结构化事件）
-    llm/                  大模型对话层（OpenAI 兼容 SSE 流式）
-    tts/                  语音层（系统 TTS）
-    copilot/              编排层（M1 核心闭环）
-    config/  persona/     配置与人设
+    llm/                  大模型对话层（OpenAI 兼容 SSE 流式 + 多轮历史）
+    tts/                  语音层（系统 TTS，句子流式 + 队列空闲回调）
+    asr/                  语音识别层（系统 SpeechRecognizer）
+    voice/                语音交互层（按键/连续/唤醒词三模式）
+    copilot/              编排层（播报改写 + 多轮聊天 + 打断）
+    safety/               安全策略层（驾驶负荷 L0/L3）
+    enroute/              沿途数据层（骨架）
+    config/  persona/     配置与人设（内置预设 + 自定义）
 docs/                     项目文档
 DESIGN.md                 设计文档
 ```
