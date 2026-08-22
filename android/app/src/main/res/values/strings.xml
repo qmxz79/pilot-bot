@@ -16,8 +16,11 @@
 
     <string name="open_settings">设置</string>
     <string name="simulate_broadcast">模拟播报</string>
+    <string name="simulate_narration">模拟跨区叙事</string>
     <string name="copilot_default">副驾还没说话…</string>
     <string name="simulated_broadcast_text">前方 3 公里拥堵，预计通行 6 分钟</string>
+    <string name="simulated_narration_text">你正进入北京市朝阳区，跟司机讲讲这里有什么值得提的。</string>
+    <string name="narration_area_format">你正进入 %1$s%2$s，跟司机讲讲这里有什么值得提的。</string>
     <string name="mic_button">说话</string>
     <string name="mic_button_listening">停止听</string>
     <string name="mic_permission_required">需要录音权限才能说话</string>

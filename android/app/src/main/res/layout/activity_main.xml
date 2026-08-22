@@ -52,6 +52,13 @@
             android:text="@string/simulate_broadcast" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/simulateNarrationButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/simulate_narration" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/micButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

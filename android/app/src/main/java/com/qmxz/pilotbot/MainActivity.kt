@@ -16,6 +16,7 @@ import com.google.android.material.button.MaterialButton
 import com.qmxz.pilotbot.asr.AndroidSpeechToText
 import com.qmxz.pilotbot.config.AppConfig
 import com.qmxz.pilotbot.copilot.CopilotEngine
+import com.qmxz.pilotbot.enroute.AmapEnRouteDataSource
 import com.qmxz.pilotbot.llm.OpenAiCompatibleProvider
 import com.qmxz.pilotbot.navi.AmapNavigationProvider
 import com.qmxz.pilotbot.navi.GeoPoint
@@ -42,6 +43,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var copilot: CopilotEngine
     private lateinit var voiceController: VoiceController
     private lateinit var tts: AndroidTextToSpeech
+    private lateinit var enRoute: AmapEnRouteDataSource
     private val transcript = StringBuilder()
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -100,6 +102,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.simulateButton).setOnClickListener {
             copilot.speakAbout(getString(R.string.simulated_broadcast_text))
         }
+        findViewById<MaterialButton>(R.id.simulateNarrationButton).setOnClickListener {
+            copilot.narrate(getString(R.string.simulated_narration_text))
+        }
         findViewById<MaterialButton>(R.id.settingsButton).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
@@ -128,6 +133,8 @@ class MainActivity : AppCompatActivity() {
             },
             onUserText = { text -> appendTranscript(getString(R.string.transcript_user), text) },
         )
+
+        enRoute = AmapEnRouteDataSource(applicationContext)
 
         navigationProvider = AmapNavigationProvider(applicationContext)
         navigationProvider.addListener(naviListener)
@@ -196,12 +203,18 @@ class MainActivity : AppCompatActivity() {
             destination = GeoPoint(longitude = 116.397428, latitude = 39.90923),
         )
         suspend { navigationProvider.startNavi(route) }.startCoroutine(handleCompletion)
+        enRoute.start { area ->
+            copilot.narrate(
+                getString(R.string.narration_area_format, area.province, area.city),
+            )
+        }
     }
 
     private fun stopCurrentNavigation() {
         stopButton.isEnabled = false
         startButton.isEnabled = true
         statusText.setText(R.string.status_navigation_stopped)
+        enRoute.stop()
         suspend { navigationProvider.stopNavi() }.startCoroutine(handleCompletion)
     }
 
@@ -241,6 +254,7 @@ class MainActivity : AppCompatActivity() {
         destroyed = true
         mainHandler.removeCallbacksAndMessages(null)
         navigationProvider.removeListener(naviListener)
+        enRoute.destroy()
         voiceController.shutdown()
         copilot.close()
         tts.shutdown()

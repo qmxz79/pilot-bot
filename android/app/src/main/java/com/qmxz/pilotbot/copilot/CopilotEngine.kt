@@ -45,6 +45,7 @@ class CopilotEngine(
     private var generation: Job? = null
     private var latestState: NaviState? = null
     private var latestNaviText: String? = null
+    private var latestLoad: DrivingLoadLevel = DrivingLoadLevel.L3_ACTIVE
     // Speaking-window state (both only touched on the main thread).
     private var speaking = false
     private var generationFinished = false
@@ -56,23 +57,39 @@ class CopilotEngine(
         tts.setOnIdle { scope.launch { maybeEndSpeaking() } }
     }
 
-    /** Updates the latest navigation snapshot used for driving-load estimation. */
+    /** Updates the latest navigation snapshot and re-estimates driving load. */
     fun updateNaviState(state: NaviState) {
         latestState = state
+        latestLoad = loadEstimator.estimate(state)
     }
 
     /**
-     * Rewrites one navigation broadcast into copilot speech. When the load estimator says L0
-     * (heavy traffic / tight manoeuvres), the copilot stays quiet and only the SDK's own
-     * broadcast is heard. User chat is unaffected.
+     * Rewrites one navigation broadcast into copilot speech. Under L0/L1 (crawl / tight
+     * manoeuvre) the copilot stays quiet and only the SDK's own broadcast is heard. User chat is
+     * unaffected.
      */
     fun speakAbout(naviText: String) {
         latestNaviText = naviText
-        if (loadEstimator.estimate(latestState) == DrivingLoadLevel.L0_SILENT) return
+        if (latestLoad == DrivingLoadLevel.L0_SILENT || latestLoad == DrivingLoadLevel.L1_RESTRAINED) return
 
         val messages = listOf(
             ChatMessage(Role.SYSTEM, config.currentPersona().buildSystemPrompt()),
             ChatMessage(Role.USER, contextBuilder.buildContextBlock(contextBuilder.buildEvent(naviText))),
+        )
+        generate(messages, onDone = {})
+    }
+
+    /**
+     * Proactive narration (e.g. crossing an administrative boundary). Same L0/L1 gate as
+     * [speakAbout]: the copilot does not initiate when the driving is demanding.
+     */
+    fun narrate(situation: String) {
+        if (latestLoad == DrivingLoadLevel.L0_SILENT || latestLoad == DrivingLoadLevel.L1_RESTRAINED) return
+        if (situation.isBlank()) return
+
+        val messages = listOf(
+            ChatMessage(Role.SYSTEM, config.currentPersona().buildSystemPrompt()),
+            ChatMessage(Role.USER, situation),
         )
         generate(messages, onDone = {})
     }
