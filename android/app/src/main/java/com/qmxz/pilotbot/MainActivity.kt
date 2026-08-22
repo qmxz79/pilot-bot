@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.widget.EditText
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -36,6 +37,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var copilotText: TextView
     private lateinit var transcriptText: TextView
     private lateinit var transcriptScroll: ScrollView
+    private lateinit var chatInput: EditText
     private lateinit var micButton: MaterialButton
     private lateinit var startButton: MaterialButton
     private lateinit var stopButton: MaterialButton
@@ -95,6 +97,7 @@ class MainActivity : AppCompatActivity() {
         copilotText = findViewById(R.id.copilotText)
         transcriptText = findViewById(R.id.transcriptText)
         transcriptScroll = findViewById(R.id.transcriptScroll)
+        chatInput = findViewById(R.id.chatInput)
         micButton = findViewById(R.id.micButton)
         startButton = findViewById(R.id.startNavigationButton)
         stopButton = findViewById(R.id.stopNavigationButton)
@@ -109,6 +112,7 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
         micButton.setOnClickListener { onMicPressed() }
+        findViewById<MaterialButton>(R.id.sendButton).setOnClickListener { sendChatText() }
 
         tts = AndroidTextToSpeech(applicationContext)
         copilot = CopilotEngine(
@@ -140,6 +144,19 @@ class MainActivity : AppCompatActivity() {
         navigationProvider.addListener(naviListener)
         startButton.setOnClickListener { requestLocationThenStartNavigation() }
         stopButton.setOnClickListener { stopCurrentNavigation() }
+
+        // First-run guidance: jump straight into settings to wire model/persona/voice mode.
+        if (AppConfig(applicationContext).consumeFirstLaunch()) {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+    }
+
+    private fun sendChatText() {
+        val text = chatInput.text?.toString()?.trim().orEmpty()
+        if (text.isEmpty()) return
+        appendTranscript(getString(R.string.transcript_user), text)
+        chatInput.text?.clear()
+        copilot.chat(text)
     }
 
     private fun onMicPressed() {

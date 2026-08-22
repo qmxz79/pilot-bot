@@ -1,5 +1,7 @@
 package com.qmxz.pilotbot.persona
 
+import org.json.JSONObject
+
 /** A copilot persona used to build the system prompt. */
 data class Persona(
     val id: String,
@@ -7,6 +9,33 @@ data class Persona(
     val tone: String,
     val catchphrase: String,
 ) {
+    /**
+     * JSON export for sharing; intentionally excludes [id] so any endpoint can read it. Import
+     * lands in the custom slot ([PersonaStore.CUSTOM_ID]) rather than extending multi-preset storage.
+     */
+    fun toJson(): String = JSONObject()
+        .put("name", name)
+        .put("tone", tone)
+        .put("catchphrase", catchphrase)
+        .toString()
+
+    companion object {
+        /** Parses an exported persona JSON; null on malformed input. */
+        fun fromJson(json: String): Persona? {
+            val obj = try {
+                JSONObject(json)
+            } catch (_: Exception) {
+                return null
+            }
+            return Persona(
+                id = "",
+                name = obj.optString("name"),
+                tone = obj.optString("tone"),
+                catchphrase = obj.optString("catchphrase"),
+            )
+        }
+    }
+}
     fun buildSystemPrompt(): String = buildString {
         append("你是副驾驶座上的朋友「${name.ifBlank { "小伴" }}」，正陪司机开车。\n")
         append("说话方式：${tone.ifBlank { "轻松、活泼、像朋友" }}。\n")

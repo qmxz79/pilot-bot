@@ -23,6 +23,8 @@
     <string name="narration_area_format">你正进入 %1$s%2$s，跟司机讲讲这里有什么值得提的。</string>
     <string name="mic_button">说话</string>
     <string name="mic_button_listening">停止听</string>
+    <string name="chat_input_hint">打字跟副驾说…</string>
+    <string name="send_button">发送</string>
     <string name="mic_permission_required">需要录音权限才能说话</string>
     <string name="transcript_user">你</string>
     <string name="transcript_copilot">副驾</string>
@@ -41,6 +43,11 @@
     <string name="settings_name_hint">名字</string>
     <string name="settings_tone_hint">语气，如 轻松、活泼、像朋友</string>
     <string name="settings_catchphrase_hint">口头禅（可留空）</string>
+    <string name="share_persona">分享人设</string>
+    <string name="import_persona">从剪贴板导入人设</string>
+    <string name="import_persona_hint">先复制人设 JSON 到剪贴板再点导入</string>
+    <string name="import_persona_success">已导入到「自定义」人设</string>
+    <string name="import_persona_failed">剪贴板里没有可识别的人设 JSON</string>
 
     <string name="settings_voice_section">语音交互</string>
     <string name="voice_mode_push_to_talk">按键说话（点一下说一句）</string>

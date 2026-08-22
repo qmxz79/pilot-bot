@@ -1,11 +1,14 @@
 package com.qmxz.pilotbot
 
+import android.content.ClipboardManager
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.RadioGroup
 import android.widget.Spinner
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
@@ -100,6 +103,32 @@ class SettingsActivity : AppCompatActivity() {
             config.wakeWord = wakeWord.text?.toString()?.trim().orEmpty()
             setResult(RESULT_OK)
             finish()
+        }
+
+        findViewById<MaterialButton>(R.id.sharePersonaButton).setOnClickListener {
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, config.currentPersona().toJson())
+            }
+            startActivity(Intent.createChooser(send, getString(R.string.share_persona)))
+        }
+
+        findViewById<MaterialButton>(R.id.importPersonaButton).setOnClickListener {
+            val clip = getSystemService(ClipboardManager::class.java)?.primaryClip
+            val text = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()
+            val imported = text?.let { Persona.fromJson(it) }
+            if (imported != null) {
+                config.persona = imported.copy(id = PersonaStore.CUSTOM_ID)
+                config.personaId = PersonaStore.CUSTOM_ID
+                personaSpinner.setSelection(presetIds.indexOf(PersonaStore.CUSTOM_ID).coerceAtLeast(0), true)
+                name.setText(imported.name)
+                tone.setText(imported.tone)
+                catchphrase.setText(imported.catchphrase)
+                applyPreset(PersonaStore.CUSTOM_ID)
+                Toast.makeText(this, R.string.import_persona_success, Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, R.string.import_persona_failed, Toast.LENGTH_SHORT).show()
+            }
         }
     }
 

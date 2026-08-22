@@ -55,6 +55,13 @@ class AppConfig(context: Context) {
         get() = prefs.getString(KEY_WAKE_WORD, DEFAULT_WAKE_WORD).orEmpty()
         set(value) = prefs.edit().putString(KEY_WAKE_WORD, value).apply()
 
+    /** True only on the very first launch; flips the flag so it cannot fire twice. */
+    fun consumeFirstLaunch(): Boolean {
+        val first = prefs.getBoolean(KEY_FIRST_LAUNCH, true)
+        if (first) prefs.edit().putBoolean(KEY_FIRST_LAUNCH, false).apply()
+        return first
+    }
+
     private companion object {
         const val KEY_BASE_URL = "llm_base_url"
         const val KEY_API_KEY = "llm_api_key"
@@ -65,6 +72,7 @@ class AppConfig(context: Context) {
         const val KEY_PERSONA_ID = "persona_id"
         const val KEY_MODE = "conversation_mode"
         const val KEY_WAKE_WORD = "wake_word"
+        const val KEY_FIRST_LAUNCH = "first_launch"
         const val DEFAULT_NAME = "小伴"
         const val DEFAULT_TONE = "轻松、活泼、像朋友"
         const val DEFAULT_WAKE_WORD = "小伴"

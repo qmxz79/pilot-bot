@@ -4,12 +4,11 @@
 
 ## 项目状态
 
-**M3/M4 完成（代码）：安全策略四档负荷 + 沿途数据真实接入（高德定位 SDK 逆地理/行政区划叙事）。全部里程碑骨架就位，待真机验收。**
+**M5 打磨完成（代码）：人设 JSON 导入/导出、文字输入兜底、首次启动引导。DESIGN §5 七层 + MVP 清单全部落地，待真机验收。**
 
 - 代码：`android/`（包名 `com.qmxz.pilotbot`）
 - 设计：`DESIGN.md`
-- M0 交付与验收清单：`docs/M0-DELIVERY.md`
-- M1-M2 交付与验收清单：`docs/M1-M2-DELIVERY.md`
+- 交付与验收清单：`docs/M0-DELIVERY.md`、`docs/M1-M2-DELIVERY.md`
 
 ## 功能规划
 
