@@ -3,3 +3,10 @@ sdk.dir=/path/to/Android/Sdk
 
 # 高德开放平台申请的 Android 导航 SDK Key；不要提交实际 Key。
 amap.api.key=YOUR_AMAP_API_KEY
+
+# 发布签名（生成：keytool -genkeypair；签名密码务必备份，丢失将无法升级应用）
+# keystore 路径相对 android/ 根目录（如 app/release.keystore）
+signing.keystore=/path/to/release.keystore
+signing.storePassword=YOUR_STORE_PASSWORD
+signing.keyAlias=YOUR_KEY_ALIAS
+signing.keyPassword=YOUR_KEY_PASSWORD

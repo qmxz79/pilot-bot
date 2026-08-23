@@ -9,6 +9,9 @@ build/
 app/libs/
 app/src/main/jniLibs/
 
+# Release signing keystore (never commit; see local.properties signing.* keys)
+app/release.keystore
+
 # IDE metadata
 .idea/
 *.iml

@@ -16,6 +16,17 @@ android {
     namespace = "com.qmxz.pilotbot"
     compileSdk = 34
 
+    signingConfigs {
+        create("release") {
+            val sp = localProperties
+            // local.properties paths are relative to the gradle root (android/).
+            storeFile = sp.getProperty("signing.keystore")?.let { rootProject.file(it) }
+            storePassword = sp.getProperty("signing.storePassword", "")
+            keyAlias = sp.getProperty("signing.keyAlias", "")
+            keyPassword = sp.getProperty("signing.keyPassword", "")
+        }
+    }
+
     defaultConfig {
         applicationId = "com.qmxz.pilotbot"
         minSdk = 26
@@ -33,6 +44,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
