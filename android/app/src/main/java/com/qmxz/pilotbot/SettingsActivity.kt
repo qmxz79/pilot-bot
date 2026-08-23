@@ -3,6 +3,7 @@ package com.qmxz.pilotbot
 import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Bundle
+import android.speech.tts.TextToSpeech
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
@@ -37,6 +38,22 @@ class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
+
+        // Probe installed TTS engines (getEngines() is instance-only in API 34; the probe is
+        // throwaway and independent of engine init success).
+        val probe = TextToSpeech(applicationContext) {}
+        val hasTtsEngine = probe.getEngines().isNotEmpty()
+        runCatching { probe.shutdown() }
+
+        val ttsWarning = findViewById<View>(R.id.ttsWarning)
+        if (hasTtsEngine) {
+            ttsWarning.visibility = View.GONE
+        } else {
+            ttsWarning.visibility = View.VISIBLE
+            findViewById<MaterialButton>(R.id.ttsWarningButton).setOnClickListener {
+                startActivity(Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA))
+            }
+        }
 
         val config = AppConfig(applicationContext)
         baseUrl = findViewById(R.id.baseUrlInput)

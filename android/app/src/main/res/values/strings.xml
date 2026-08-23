@@ -30,6 +30,9 @@
     <string name="transcript_copilot">副驾</string>
 
     <string name="settings_title">副驾设置</string>
+    <string name="tts_warning_title">未检测到语音引擎</string>
+    <string name="tts_warning_body">副驾说话需要系统「文字转语音（TTS）」引擎。请前往系统设置安装或启用一个语音引擎（如讯飞语音合成、Google 文字转语音），装好后重新打开 App 就有声音了。</string>
+    <string name="tts_warning_action">去系统设置</string>
     <string name="settings_model_section">模型（OpenAI 兼容）</string>
     <string name="settings_base_url_hint">base_url，如 https://api.deepseek.com/v1</string>
     <string name="settings_api_key_hint">API Key</string>
