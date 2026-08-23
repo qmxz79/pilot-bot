@@ -42,9 +42,13 @@ DESIGN.md                 设计文档
 ## 本地构建（需要真机）
 
 1. 环境：JDK 17 + Android Studio（含 Android SDK 34）
-2. 申请[高德开放平台](https://lbs.amap.com/) key（包名 `com.qmxz.pilotbot` + `./gradlew signingReport` 的 SHA1）
-3. 复制 `android/local.properties.template` 为 `android/local.properties`，填入 `sdk.dir` 与 `amap.api.key`
-4. Android Studio 打开 `android/` 目录，Sync 后运行到真机
+2. 拉取高德 SDK（`maven.amap.com` 已永久不可用，改为离线引入）：
+   - Windows：`powershell -ExecutionPolicy Bypass -File .\fetch-amap-sdk.ps1`
+   - macOS/Linux：`./fetch-amap-sdk.sh`
+   （首次下载约 224MB；脚本幂等、支持断点续传，产物在 `android/app/libs/` 与 `jniLibs/`，gitignored）
+3. 申请[高德开放平台](https://lbs.amap.com/) key（包名 `com.qmxz.pilotbot` + `./gradlew signingReport` 的 SHA1）
+4. 复制 `android/local.properties.template` 为 `android/local.properties`，填入 `sdk.dir` 与 `amap.api.key`
+5. Android Studio 打开 `android/` 目录，Sync 后运行到真机
 
 > ⚠️ `local.properties` 已在 `.gitignore` 中，**永远不要**把 key 提交进仓库。
 

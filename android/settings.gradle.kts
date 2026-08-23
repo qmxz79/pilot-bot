@@ -2,7 +2,6 @@ pluginManagement {
     repositories {
         google()
         mavenCentral()
-        maven(url = "https://maven.amap.com/repository/maven-public/")
         gradlePluginPortal()
     }
 }
@@ -12,7 +11,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven(url = "https://maven.amap.com/repository/maven-public/")
     }
 }
 
