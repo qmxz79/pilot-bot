@@ -13,6 +13,9 @@ interface TextToSpeech {
 
     /** Fires once the playback queue drains to empty (used to resume listening in half-duplex). */
     fun setOnIdle(callback: () -> Unit)
+
+    /** True when the platform TTS engine initialized; false degrades gracefully to text-only. */
+    val isAvailable: Boolean
 }
 
 /**

@@ -154,13 +154,15 @@ class CopilotEngine(
                     if (sentences.isNotEmpty()) {
                         val spoken = sentences.joinToString("")
                         spokenUpTo += spoken.length
-                        spokenAnything = true
-                        scope.launch { tts.speak(spoken) }
+                        if (tts.isAvailable) {
+                            spokenAnything = true
+                            scope.launch { tts.speak(spoken) }
+                        }
                     }
                 }
             }
             val rest = fullText.substring(spokenUpTo).trim()
-            if (rest.isNotEmpty()) {
+            if (rest.isNotEmpty() && tts.isAvailable) {
                 spokenAnything = true
                 scope.launch { tts.speak(rest) }
             }

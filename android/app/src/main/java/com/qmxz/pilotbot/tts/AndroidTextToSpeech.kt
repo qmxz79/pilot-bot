@@ -13,6 +13,9 @@ import kotlinx.coroutines.withContext
  * System TTS wrapper (no extra dependency). [speak] is fire-and-forget from the copilot's view:
  * QUEUE_ADD preserves utterance order, and each call only speaks complete sentences — trailing
  * partial sentences are left for the next delta or flushed by the caller.
+ *
+ * If the platform TTS engine is missing/broken, [isAvailable] is false and [speak] becomes a
+ * no-op instead of throwing — the copilot degrades to text-only rather than crashing.
  */
 class AndroidTextToSpeech(context: Context) : TextToSpeech {
     private val ready = CompletableDeferred<Unit>()
@@ -20,6 +23,12 @@ class AndroidTextToSpeech(context: Context) : TextToSpeech {
     private val pending = mutableSetOf<String>()
     private var idleCallback: (() -> Unit)? = null
     private val utteranceCounter = AtomicLong(0)
+
+    @Volatile
+    private var available = false
+
+    override val isAvailable: Boolean
+        get() = available
 
     init {
         tts = AndroidTts(context.applicationContext) { status ->
@@ -38,16 +47,17 @@ class AndroidTextToSpeech(context: Context) : TextToSpeech {
                         maybeIdle()
                     }
                 })
-                ready.complete(Unit)
-            } else {
-                ready.completeExceptionally(IllegalStateException("TTS 初始化失败"))
+                available = true
             }
+            // Always complete; speak() checks [available] and no-ops otherwise.
+            ready.complete(Unit)
         }
     }
 
     override suspend fun speak(text: String) {
         if (text.isBlank()) return
         ready.await()
+        if (!available) return
         val id = "copilot-${utteranceCounter.incrementAndGet()}"
         withContext(Dispatchers.Main) {
             pending.add(id)
@@ -56,12 +66,14 @@ class AndroidTextToSpeech(context: Context) : TextToSpeech {
     }
 
     override fun interrupt() {
+        if (!available) return
         pending.clear()
         tts.stop()
         maybeIdle()
     }
 
     override fun shutdown() {
+        if (!available) return
         tts.stop()
         tts.shutdown()
     }
