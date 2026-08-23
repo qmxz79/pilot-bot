@@ -5,6 +5,10 @@ local.properties
 .gradle/
 build/
 
+# Vendored AMap SDK binary (closed-source; fetch from maven.amap.com when it recovers)
+app/libs/
+app/src/main/jniLibs/
+
 # IDE metadata
 .idea/
 *.iml

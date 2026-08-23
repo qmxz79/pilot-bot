@@ -55,8 +55,10 @@ dependencies {
     implementation(libs.appcompat)
     implementation(libs.material)
     implementation(libs.constraintlayout)
-    implementation(libs.amap.navi._3dmap)
-    implementation(libs.amap.location)
+    // Local AMap SDK jar: maven.amap.com is globally unreachable (2026-08), so the merged
+    // 3DMap+Navi+Search+Location jar is vendored under libs/ (gitignored). Switch back to
+    // `com.amap.api:navi-3dmap` + `com.amap.api:location` if that repo recovers.
+    implementation(files("libs/amap-all.jar"))
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
 }

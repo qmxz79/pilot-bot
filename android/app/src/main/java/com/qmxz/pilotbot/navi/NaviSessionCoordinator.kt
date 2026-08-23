@@ -210,7 +210,7 @@ class NaviSessionCoordinator private constructor(context: Context) {
             val rejectedBySdk = synchronized(routeLock) {
                 if (phase != Phase.START_PENDING || startRequestedGeneration != routeGeneration) {
                     false
-                } else if (navi.startNavi(AMapNavi.GPSNaviMode)) {
+                } else if (navi.startNavi(GPS_NAVI_MODE)) {
                     false
                 } else {
                     phase = Phase.IDLE
@@ -347,7 +347,8 @@ class NaviSessionCoordinator private constructor(context: Context) {
 
     private fun GeoPoint.toAmapLatLng(): NaviLatLng = NaviLatLng(latitude, longitude)
 
-    private fun defaultStrategy(): Int = AMapNavi.strategyConvert(true, false, false, false, false)
+    // strategyConvert is an instance method in the V11 SDK (was static before).
+    private fun defaultStrategy(): Int = navi.strategyConvert(true, false, false, false, false)
 
     private fun NaviInfo.toNaviState(): NaviState = NaviState(
         remainingDistanceMeters = pathRetainDistance,
@@ -393,6 +394,8 @@ class NaviSessionCoordinator private constructor(context: Context) {
 
     companion object {
         private const val TAG = "NaviSessionCoordinator"
+        // AMapNavi.GPSNaviMode was removed in SDK V11; GPS navigation mode is 1.
+        private const val GPS_NAVI_MODE = 1
         private const val INIT_ERROR = -1001
         private const val CALCULATION_REQUEST_ERROR = -1002
         private const val CALCULATION_BUSY_ERROR = -1003
