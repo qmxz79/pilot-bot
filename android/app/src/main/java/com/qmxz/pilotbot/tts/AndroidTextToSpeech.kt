@@ -7,6 +7,7 @@ import android.speech.tts.TextToSpeech as AndroidTts
 import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -45,37 +46,48 @@ class AndroidTextToSpeech(context: Context) : TextToSpeech {
 
     /**
      * Creates the engine, retrying a few times because init can fail transiently while the engine
-     * service warms up. Uses the local [instance] inside the callback so a synchronous init (which
-     * some engines do) cannot read the not-yet-assigned [tts] property.
+     * service warms up. The init callback is deferred onto the main loop (Handler.post) so it
+     * always runs after the instance is captured — this is what makes referencing [instance] inside
+     * its own constructor safe.
      */
     private fun initWithRetry(attemptsLeft: Int) {
+        // Holder indirection: the callback cannot reference `instance` (its own initializer), so
+        // it captures the holder and reads the instance at run time.
+        val holder = AtomicReference<AndroidTts>()
         val instance = AndroidTts(appContext) { status ->
-            if (status == AndroidTts.SUCCESS) {
-                configureLanguage(instance)
-                instance.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {}
-
-                    override fun onDone(utteranceId: String?) {
-                        utteranceId?.let { pending.remove(it) }
-                        maybeIdle()
-                    }
-
-                    override fun onError(utteranceId: String?) {
-                        utteranceId?.let { pending.remove(it) }
-                        maybeIdle()
-                    }
-                })
-                available = true
-                ready.complete(Unit)
-            } else if (attemptsLeft > 1) {
-                runCatching { instance.shutdown() }
-                Handler(Looper.getMainLooper()).postDelayed({ initWithRetry(attemptsLeft - 1) }, 1000L)
-            } else {
-                statusText = "语音不可用(初始化失败, 状态 $status)"
-                ready.complete(Unit)
+            Handler(Looper.getMainLooper()).post {
+                holder.get()?.let { handleInitResult(status, it, attemptsLeft) }
             }
         }
+        holder.set(instance)
         tts = instance
+    }
+
+    private fun handleInitResult(status: Int, instance: AndroidTts, attemptsLeft: Int) {
+        if (status == AndroidTts.SUCCESS) {
+            configureLanguage(instance)
+            instance.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {}
+
+                override fun onDone(utteranceId: String?) {
+                    utteranceId?.let { pending.remove(it) }
+                    maybeIdle()
+                }
+
+                override fun onError(utteranceId: String?) {
+                    utteranceId?.let { pending.remove(it) }
+                    maybeIdle()
+                }
+            })
+            available = true
+            ready.complete(Unit)
+        } else if (attemptsLeft > 1) {
+            runCatching { instance.shutdown() }
+            Handler(Looper.getMainLooper()).postDelayed({ initWithRetry(attemptsLeft - 1) }, 1000L)
+        } else {
+            statusText = "语音不可用(初始化失败, 状态 $status)"
+            ready.complete(Unit)
+        }
     }
 
     /** Prefers Chinese; falls back to the device default so engines without a zh voice still speak. */
