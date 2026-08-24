@@ -4,6 +4,7 @@ local.properties
 # Gradle and Android build output
 .gradle/
 build/
+.kotlin/
 
 # Vendored AMap SDK binary (closed-source; fetch from maven.amap.com when it recovers)
 app/libs/
