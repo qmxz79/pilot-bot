@@ -26,6 +26,8 @@
     <string name="expand_panel">▲</string>
     <string name="collapse_panel">▼</string>
     <string name="search_waiting_location">等待定位，稍后再试</string>
+    <string name="searching">搜索中…</string>
+    <string name="search_no_result">没有找到相关地点</string>
 
     <string name="mic_button">说话</string>
     <string name="mic_button_listening">停止听</string>

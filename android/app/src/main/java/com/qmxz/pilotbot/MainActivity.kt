@@ -199,12 +199,16 @@ class MainActivity : AppCompatActivity() {
     private fun doSearch() {
         val keyword = searchInput.text?.toString()?.trim().orEmpty()
         if (keyword.isEmpty()) return
-        statusText.text = getString(R.string.status_calculating_route)
+        statusText.text = getString(R.string.searching)
+        searchResults.visibility = View.GONE
         placeSearch.search(keyword, enRoute.latestLocation()?.cityCode) { result ->
             result.onSuccess { list ->
                 renderOnMain { showSearchResults(list) }
             }.onFailure { e ->
-                renderOnMain { statusText.text = "搜索失败：${e.message}" }
+                renderOnMain {
+                    statusText.text = "搜索失败：${e.message}"
+                    searchResults.visibility = View.GONE
+                }
             }
         }
     }
@@ -212,7 +216,7 @@ class MainActivity : AppCompatActivity() {
     private fun showSearchResults(results: List<PlaceResult>) {
         searchResultList.removeAllViews()
         if (results.isEmpty()) {
-            val empty = TextView(this).apply { text = getString(R.string.search_waiting_location) }
+            val empty = TextView(this).apply { text = getString(R.string.search_no_result) }
             searchResultList.addView(empty)
         } else {
             results.forEach { place ->
