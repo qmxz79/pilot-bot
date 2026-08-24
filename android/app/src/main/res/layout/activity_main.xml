@@ -8,114 +8,189 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- 顶部搜索栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:background="#E8FFFFFF"
+        android:orientation="horizontal"
+        android:padding="8dp">
+
+        <EditText
+            android:id="@+id/searchInput"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="@string/search_hint"
+            android:imeOptions="actionSearch"
+            android:inputType="text"
+            android:maxLines="1" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/searchButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="@string/search_action" />
+    </LinearLayout>
+
+    <!-- 搜索结果列表（覆盖在地图上） -->
+    <LinearLayout
+        android:id="@+id/searchResults"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:layout_marginTop="60dp"
+        android:background="#F0FFFFFF"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/searchResultList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+            android:textIsSelectable="false" />
+    </LinearLayout>
+
+    <!-- 底部控制面板：常显条 + 可折叠容器 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:background="#E8FFFFFF"
-        android:orientation="vertical"
-        android:padding="16dp">
-
-        <TextView
-            android:id="@+id/statusText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:text="@string/status_ready"
-            android:textAppearance="@style/TextAppearance.Material3.BodyMedium" />
-
-        <TextView
-            android:id="@+id/copilotText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:gravity="center"
-            android:maxLines="2"
-            android:text="@string/copilot_default"
-            android:textAppearance="@style/TextAppearance.Material3.BodySmall"
-            android:textIsSelectable="true" />
-
-        <ScrollView
-            android:id="@+id/transcriptScroll"
-            android:layout_width="match_parent"
-            android:layout_height="100dp"
-            android:layout_marginTop="8dp"
-            android:background="@android:drawable/edit_text">
-
-            <TextView
-                android:id="@+id/transcriptText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:padding="6dp"
-                android:textAppearance="@style/TextAppearance.Material3.BodySmall"
-                android:textIsSelectable="true" />
-        </ScrollView>
+        android:orientation="vertical">
 
         <LinearLayout
+            android:id="@+id/panelHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="horizontal">
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="6dp">
 
-            <EditText
-                android:id="@+id/chatInput"
+            <TextView
+                android:id="@+id/statusText"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:hint="@string/chat_input_hint"
-                android:inputType="text"
-                android:maxLines="2" />
+                android:gravity="center"
+                android:maxLines="1"
+                android:text="@string/status_ready"
+                android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/sendButton"
+                android:id="@+id/expandButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:text="@string/send_button" />
+                android:minWidth="0dp"
+                android:text="@string/expand_panel" />
         </LinearLayout>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/simulateButton"
+        <LinearLayout
+            android:id="@+id/panelBody"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/simulate_broadcast" />
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:visibility="gone">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/simulateNarrationButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/simulate_narration" />
+            <TextView
+                android:id="@+id/copilotText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:maxLines="2"
+                android:text="@string/copilot_default"
+                android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                android:textIsSelectable="true" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/micButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/mic_button" />
+            <ScrollView
+                android:id="@+id/transcriptScroll"
+                android:layout_width="match_parent"
+                android:layout_height="100dp"
+                android:layout_marginTop="8dp"
+                android:background="@android:drawable/edit_text">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/startNavigationButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/start_test_navigation" />
+                <TextView
+                    android:id="@+id/transcriptText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="6dp"
+                    android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                    android:textIsSelectable="true" />
+            </ScrollView>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/stopNavigationButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:enabled="false"
-            android:text="@string/stop_navigation" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/settingsButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/open_settings" />
+                <EditText
+                    android:id="@+id/chatInput"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="@string/chat_input_hint"
+                    android:inputType="text"
+                    android:maxLines="2" />
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/sendButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:text="@string/send_button" />
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/simulateButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/simulate_broadcast" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/simulateNarrationButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/simulate_narration" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/micButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/mic_button" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/startNavigationButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/start_test_navigation" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/stopNavigationButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:enabled="false"
+                android:text="@string/stop_navigation" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/settingsButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/open_settings" />
+
+        </LinearLayout>
     </LinearLayout>
+
 </FrameLayout>

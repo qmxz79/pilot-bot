@@ -21,6 +21,12 @@
     <string name="simulated_broadcast_text">前方 3 公里拥堵，预计通行 6 分钟</string>
     <string name="simulated_narration_text">你正进入北京市朝阳区，跟司机讲讲这里有什么值得提的。</string>
     <string name="narration_area_format">你正进入 %1$s%2$s，跟司机讲讲这里有什么值得提的。</string>
+    <string name="search_hint">搜索目的地…</string>
+    <string name="search_action">搜索</string>
+    <string name="expand_panel">▲</string>
+    <string name="collapse_panel">▼</string>
+    <string name="search_waiting_location">等待定位，稍后再试</string>
+
     <string name="mic_button">说话</string>
     <string name="mic_button_listening">停止听</string>
     <string name="chat_input_hint">打字跟副驾说…</string>
@@ -33,6 +39,8 @@
     <string name="tts_warning_title">未检测到语音引擎</string>
     <string name="tts_warning_body">副驾说话需要系统「文字转语音（TTS）」引擎。请前往系统设置安装或启用一个语音引擎（如讯飞语音合成、Google 文字转语音），装好后重新打开 App 就有声音了。</string>
     <string name="tts_warning_action">去系统设置</string>
+    <string name="asr_warning_title">未检测到语音识别服务</string>
+    <string name="asr_warning_body">「说话」需要系统的语音识别服务（如 Google App 或厂商语音助手）。没有它时只能用文字聊天，或语音引擎装好后重试。</string>
     <string name="settings_model_section">模型（OpenAI 兼容）</string>
     <string name="settings_base_url_hint">base_url，如 https://api.deepseek.com/v1</string>
     <string name="settings_api_key_hint">API Key</string>

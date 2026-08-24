@@ -3,6 +3,7 @@ package com.qmxz.pilotbot
 import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Bundle
+import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.view.View
 import android.widget.AdapterView
@@ -54,6 +55,9 @@ class SettingsActivity : AppCompatActivity() {
                 startActivity(Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA))
             }
         }
+
+        findViewById<View>(R.id.asrWarning).visibility =
+            if (SpeechRecognizer.isRecognitionAvailable(this)) View.GONE else View.VISIBLE
 
         val config = AppConfig(applicationContext)
         baseUrl = findViewById(R.id.baseUrlInput)

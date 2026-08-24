@@ -14,6 +14,7 @@ import com.qmxz.pilotbot.safety.DrivingLoadLevel
 import com.qmxz.pilotbot.safety.SimpleDrivingLoadEstimator
 import com.qmxz.pilotbot.tts.TextToSpeech
 import com.qmxz.pilotbot.tts.splitSentences
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -45,6 +46,7 @@ class CopilotEngine(
     private var generation: Job? = null
     private var latestState: NaviState? = null
     private var latestNaviText: String? = null
+    private var locationDesc: String? = null
     private var latestLoad: DrivingLoadLevel = DrivingLoadLevel.L3_ACTIVE
     // Speaking-window state (both only touched on the main thread).
     private var speaking = false
@@ -61,6 +63,11 @@ class CopilotEngine(
     fun updateNaviState(state: NaviState) {
         latestState = state
         latestLoad = loadEstimator.estimate(state)
+    }
+
+    /** Feeds the current location description so chat can answer "where am I". */
+    fun updateLocation(description: String) {
+        locationDesc = description
     }
 
     /**
@@ -103,6 +110,7 @@ class CopilotEngine(
         val messages = buildList {
             add(ChatMessage(Role.SYSTEM, config.currentPersona().buildSystemPrompt()))
             latestNaviText?.let { add(ChatMessage(Role.SYSTEM, "当前驾驶情境：$it")) }
+            locationDesc?.let { add(ChatMessage(Role.SYSTEM, "你当前位置：$it")) }
             addAll(history.messages())
             add(ChatMessage(Role.USER, text))
         }
@@ -145,33 +153,42 @@ class CopilotEngine(
         var spokenAnything = false
 
         generation = scope.launch {
-            withContext(Dispatchers.IO) {
-                llm.streamChat(endpoint, messages, GenerationConfig()) { delta ->
-                    fullText.append(delta)
-                    postText(fullText.toString())
-                    val segment = fullText.substring(spokenUpTo)
-                    val sentences = splitSentences(segment)
-                    if (sentences.isNotEmpty()) {
-                        val spoken = sentences.joinToString("")
-                        spokenUpTo += spoken.length
-                        if (tts.isAvailable) {
-                            spokenAnything = true
-                            scope.launch { tts.speak(spoken) }
+            try {
+                withContext(Dispatchers.IO) {
+                    llm.streamChat(endpoint, messages, GenerationConfig()) { delta ->
+                        fullText.append(delta)
+                        postText(fullText.toString())
+                        val segment = fullText.substring(spokenUpTo)
+                        val sentences = splitSentences(segment)
+                        if (sentences.isNotEmpty()) {
+                            val spoken = sentences.joinToString("")
+                            spokenUpTo += spoken.length
+                            if (tts.isAvailable) {
+                                spokenAnything = true
+                                scope.launch { tts.speak(spoken) }
+                            }
                         }
                     }
                 }
+                val rest = fullText.substring(spokenUpTo).trim()
+                if (rest.isNotEmpty() && tts.isAvailable) {
+                    spokenAnything = true
+                    scope.launch { tts.speak(rest) }
+                }
+                val final = fullText.toString()
+                onCopilotDone(final)
+                onDone(final)
+                // Close the speaking window: immediately if nothing was queued, else when TTS drains.
+                generationFinished = true
+                if (!spokenAnything) maybeEndSpeaking()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Surface LLM/network failures instead of failing silently.
+                postText("副驾走神了：${e.message}")
+                generationFinished = true
+                if (!spokenAnything) maybeEndSpeaking()
             }
-            val rest = fullText.substring(spokenUpTo).trim()
-            if (rest.isNotEmpty() && tts.isAvailable) {
-                spokenAnything = true
-                scope.launch { tts.speak(rest) }
-            }
-            val final = fullText.toString()
-            onCopilotDone(final)
-            onDone(final)
-            // Close the speaking window: immediately if nothing was queued, else when TTS drains.
-            generationFinished = true
-            if (!spokenAnything) maybeEndSpeaking()
         }
     }
 

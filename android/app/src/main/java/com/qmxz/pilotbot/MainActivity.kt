@@ -8,11 +8,15 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.amap.api.location.AMapLocation
+import com.amap.api.maps.CameraUpdateFactory
+import com.amap.api.maps.model.LatLng
 import com.amap.api.navi.AMapNaviView
 import com.google.android.material.button.MaterialButton
 import com.qmxz.pilotbot.asr.AndroidSpeechToText
@@ -26,13 +30,15 @@ import com.qmxz.pilotbot.navi.NaviError
 import com.qmxz.pilotbot.navi.NaviEventListener
 import com.qmxz.pilotbot.navi.NaviState
 import com.qmxz.pilotbot.navi.RoutePlan
+import com.qmxz.pilotbot.search.PlaceResult
+import com.qmxz.pilotbot.search.PlaceSearch
 import com.qmxz.pilotbot.tts.AndroidTextToSpeech
 import com.qmxz.pilotbot.voice.VoiceController
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
 
-/** Harness: real Amap navigation + M1 copilot loop + M2 voice chat (mode-selectable). */
+/** Harness: fullscreen map + nav + M1 copilot loop + M2 voice chat + destination search. */
 class MainActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
     private lateinit var copilotText: TextView
@@ -42,12 +48,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var micButton: MaterialButton
     private lateinit var startButton: MaterialButton
     private lateinit var stopButton: MaterialButton
+    private lateinit var searchInput: EditText
+    private lateinit var searchResults: LinearLayout
+    private lateinit var searchResultList: LinearLayout
+    private lateinit var expandButton: MaterialButton
+    private lateinit var panelBody: LinearLayout
+    private lateinit var naviView: AMapNaviView
     private lateinit var navigationProvider: AmapNavigationProvider
     private lateinit var copilot: CopilotEngine
     private lateinit var voiceController: VoiceController
     private lateinit var tts: AndroidTextToSpeech
     private lateinit var enRoute: AmapEnRouteDataSource
-    private lateinit var naviView: AMapNaviView
+    private lateinit var placeSearch: PlaceSearch
     private val transcript = StringBuilder()
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -107,18 +119,23 @@ class MainActivity : AppCompatActivity() {
         micButton = findViewById(R.id.micButton)
         startButton = findViewById(R.id.startNavigationButton)
         stopButton = findViewById(R.id.stopNavigationButton)
+        searchInput = findViewById(R.id.searchInput)
+        searchResults = findViewById(R.id.searchResults)
+        searchResultList = findViewById(R.id.searchResultList)
+        expandButton = findViewById(R.id.expandButton)
+        panelBody = findViewById(R.id.panelBody)
 
+        findViewById<MaterialButton>(R.id.searchButton).setOnClickListener { doSearch() }
         findViewById<MaterialButton>(R.id.simulateButton).setOnClickListener {
             copilot.speakAbout(getString(R.string.simulated_broadcast_text))
         }
         findViewById<MaterialButton>(R.id.simulateNarrationButton).setOnClickListener {
             copilot.narrate(getString(R.string.simulated_narration_text))
         }
-        findViewById<MaterialButton>(R.id.settingsButton).setOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
-        }
+        findViewById<MaterialButton>(R.id.settingsButton).setOnClickListener { openSettings() }
         micButton.setOnClickListener { onMicPressed() }
         findViewById<MaterialButton>(R.id.sendButton).setOnClickListener { sendChatText() }
+        expandButton.setOnClickListener { togglePanel() }
 
         tts = AndroidTextToSpeech(applicationContext)
         copilot = CopilotEngine(
@@ -144,7 +161,10 @@ class MainActivity : AppCompatActivity() {
             onUserText = { text -> appendTranscript(getString(R.string.transcript_user), text) },
         )
 
+        placeSearch = PlaceSearch(applicationContext)
         enRoute = AmapEnRouteDataSource(applicationContext)
+        // Locate immediately on launch (map + copilot know the real position).
+        enRoute.start(onAreaChanged = {}, onFirstFix = { handleLocationFix(it) })
 
         navigationProvider = AmapNavigationProvider(applicationContext)
         navigationProvider.addListener(naviListener)
@@ -153,16 +173,60 @@ class MainActivity : AppCompatActivity() {
 
         // First-run guidance: jump straight into settings to wire model/persona/voice mode.
         if (AppConfig(applicationContext).consumeFirstLaunch()) {
-            startActivity(Intent(this, SettingsActivity::class.java))
+            openSettings()
         }
     }
 
-    private fun sendChatText() {
-        val text = chatInput.text?.toString()?.trim().orEmpty()
-        if (text.isEmpty()) return
-        appendTranscript(getString(R.string.transcript_user), text)
-        chatInput.text?.clear()
-        copilot.chat(text)
+    private fun handleLocationFix(location: AMapLocation) {
+        val desc = location.address ?: "${location.latitude},${location.longitude}"
+        copilot.updateLocation(desc)
+        naviView.getMap()?.animateCamera(
+            CameraUpdateFactory.newLatLngZoom(LatLng(location.latitude, location.longitude), 15f),
+        )
+    }
+
+    private fun doSearch() {
+        val keyword = searchInput.text?.toString()?.trim().orEmpty()
+        if (keyword.isEmpty()) return
+        statusText.text = getString(R.string.status_calculating_route)
+        placeSearch.search(keyword, enRoute.latestLocation()?.cityCode) { result ->
+            result.onSuccess { list ->
+                renderOnMain { showSearchResults(list) }
+            }.onFailure { e ->
+                renderOnMain { statusText.text = "搜索失败：${e.message}" }
+            }
+        }
+    }
+
+    private fun showSearchResults(results: List<PlaceResult>) {
+        searchResultList.removeAllViews()
+        if (results.isEmpty()) {
+            val empty = TextView(this).apply { text = getString(R.string.search_waiting_location) }
+            searchResultList.addView(empty)
+        } else {
+            results.forEach { place ->
+                val row = TextView(this).apply {
+                    text = "${place.title}\n  ${place.snippet}"
+                    textSize = 14f
+                    setPadding(12, 8, 12, 8)
+                    setOnClickListener { startNaviTo(place) }
+                }
+                searchResultList.addView(row)
+            }
+        }
+        searchResults.visibility = View.VISIBLE
+    }
+
+    private fun startNaviTo(place: PlaceResult) {
+        val start = enRoute.latestLocation()
+        if (start == null) {
+            statusText.text = getString(R.string.search_waiting_location)
+            return
+        }
+        beginNavigation(
+            start = GeoPoint(start.longitude, start.latitude),
+            destination = GeoPoint(place.lng, place.lat),
+        )
     }
 
     private fun onMicPressed() {
@@ -218,19 +282,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startTestNavigation() {
-        startButton.isEnabled = false
-        stopButton.isEnabled = true
-        statusText.setText(R.string.status_calculating_route)
-        val route = RoutePlan(
+        beginNavigation(
             start = GeoPoint(longitude = 116.3913, latitude = 39.9075),
             destination = GeoPoint(longitude = 116.397428, latitude = 39.90923),
         )
+    }
+
+    private fun beginNavigation(start: GeoPoint, destination: GeoPoint) {
+        startButton.isEnabled = false
+        stopButton.isEnabled = true
+        statusText.setText(R.string.status_calculating_route)
+        val route = RoutePlan(start = start, destination = destination)
         suspend { navigationProvider.startNavi(route) }.startCoroutine(handleCompletion)
-        enRoute.start { area ->
-            copilot.narrate(
-                getString(R.string.narration_area_format, area.province, area.city),
-            )
-        }
+        enRoute.start(
+            onAreaChanged = { area ->
+                copilot.narrate(
+                    getString(R.string.narration_area_format, area.province, area.city),
+                )
+            },
+            onFirstFix = { handleLocationFix(it) },
+        )
     }
 
     private fun stopCurrentNavigation() {
@@ -257,6 +328,24 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun sendChatText() {
+        val text = chatInput.text?.toString()?.trim().orEmpty()
+        if (text.isEmpty()) return
+        appendTranscript(getString(R.string.transcript_user), text)
+        chatInput.text?.clear()
+        copilot.chat(text)
+    }
+
+    private fun openSettings() {
+        startActivity(Intent(this, SettingsActivity::class.java))
+    }
+
+    private fun togglePanel() {
+        val collapsed = panelBody.visibility == View.GONE
+        panelBody.visibility = if (collapsed) View.VISIBLE else View.GONE
+        expandButton.text = getString(if (collapsed) R.string.collapse_panel else R.string.expand_panel)
     }
 
     private fun appendTranscript(role: String, text: String) {

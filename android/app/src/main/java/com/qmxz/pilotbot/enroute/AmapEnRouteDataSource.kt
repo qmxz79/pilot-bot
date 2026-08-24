@@ -37,14 +37,21 @@ class AmapEnRouteDataSource(context: Context) : EnRouteDataSource, AMapLocationL
     private var cachedArea: AdminArea = AdminArea("", "", "")
 
     @Volatile
+    private var cachedLocation: AMapLocation? = null
+
+    @Volatile
     private var firstFix = true
 
     @Volatile
     private var onAreaChanged: ((AdminArea) -> Unit)? = null
 
+    @Volatile
+    private var onFirstFix: ((AMapLocation) -> Unit)? = null
+
     /** Starts continuous location; [onAreaChanged] fires when province+city changes. */
-    fun start(onAreaChanged: (AdminArea) -> Unit) {
+    fun start(onAreaChanged: (AdminArea) -> Unit, onFirstFix: (AMapLocation) -> Unit = {}) {
         this.onAreaChanged = onAreaChanged
+        this.onFirstFix = onFirstFix
         firstFix = true
         client.startLocation()
     }
@@ -52,7 +59,11 @@ class AmapEnRouteDataSource(context: Context) : EnRouteDataSource, AMapLocationL
     fun stop() {
         client.stopLocation()
         onAreaChanged = null
+        onFirstFix = null
     }
+
+    /** Latest full location fix (lat/lng + address), or null before the first successful fix. */
+    fun latestLocation(): AMapLocation? = cachedLocation
 
     fun destroy() {
         stop()
@@ -62,14 +73,20 @@ class AmapEnRouteDataSource(context: Context) : EnRouteDataSource, AMapLocationL
 
     override fun onLocationChanged(location: AMapLocation?) {
         if (location == null || location.errorCode != 0) return
+        cachedLocation = location
         val area = AdminArea(
             province = location.province ?: "",
             city = location.city ?: "",
             district = location.district ?: "",
         )
         val changed = firstFix || area.province != cachedArea.province || area.city != cachedArea.city
+        val first = firstFix
         firstFix = false
         cachedArea = area
+        if (first) {
+            val callback = onFirstFix
+            scope.launch { callback?.invoke(location) }
+        }
         if (changed && area.province.isNotEmpty()) {
             Log.d(TAG, "Admin area: ${area.province}${area.city}${area.district}")
             val callback = onAreaChanged
