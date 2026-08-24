@@ -27,13 +27,19 @@ class AndroidTextToSpeech(context: Context) : TextToSpeech {
     @Volatile
     private var available = false
 
+    @Volatile
+    private var statusText = "语音初始化中…"
+
     override val isAvailable: Boolean
         get() = available
+
+    /** Human-readable TTS state for the UI: 可用 / 语言受限 / 初始化失败(状态码) / 初始化中. */
+    fun status(): String = statusText
 
     init {
         tts = AndroidTts(context.applicationContext) { status ->
             if (status == AndroidTts.SUCCESS) {
-                tts.language = Locale.CHINA
+                configureLanguage()
                 tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {}
 
@@ -48,9 +54,22 @@ class AndroidTextToSpeech(context: Context) : TextToSpeech {
                     }
                 })
                 available = true
+            } else {
+                statusText = "语音不可用(初始化失败, 状态 $status)"
             }
             // Always complete; speak() checks [available] and no-ops otherwise.
             ready.complete(Unit)
+        }
+    }
+
+    /** Prefers Chinese; falls back to the device default so engines without a zh voice still speak. */
+    private fun configureLanguage() {
+        val r = tts.setLanguage(Locale.CHINA)
+        statusText = if (r == AndroidTts.LANG_MISSING_DATA || r == AndroidTts.LANG_NOT_SUPPORTED) {
+            tts.setLanguage(Locale.getDefault())
+            "语音可用(中文声包缺失, 已用系统默认语言)"
+        } else {
+            "语音可用"
         }
     }
 

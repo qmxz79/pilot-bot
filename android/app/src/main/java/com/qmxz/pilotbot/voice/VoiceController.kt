@@ -21,6 +21,7 @@ class VoiceController(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
     private val onListeningState: (Boolean) -> Unit = {},
     private val onUserText: (String) -> Unit = {},
+    private val onListenError: (String) -> Unit = {},
 ) {
     private var handsFreeEnabled = false
     private var listening = false
@@ -63,10 +64,13 @@ class VoiceController(
     private fun pushToTalk() {
         copilot.interrupt()
         scope.launch {
-            val text = runCatching { speechToText.listenOnce() }.getOrNull()
+            val result = runCatching { speechToText.listenOnce() }
+            val text = result.getOrNull()
             if (!text.isNullOrBlank()) {
                 onUserText(text)
                 copilot.chat(text)
+            } else {
+                result.exceptionOrNull()?.let { onListenError(it.message ?: "识别失败") }
             }
         }
     }

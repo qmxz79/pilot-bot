@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.speech.SpeechRecognizer
 import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -41,6 +42,7 @@ import kotlin.coroutines.startCoroutine
 /** Harness: fullscreen map + nav + M1 copilot loop + M2 voice chat + destination search. */
 class MainActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
+    private lateinit var voiceStatus: TextView
     private lateinit var copilotText: TextView
     private lateinit var transcriptText: TextView
     private lateinit var transcriptScroll: ScrollView
@@ -112,6 +114,7 @@ class MainActivity : AppCompatActivity() {
         naviView.setNaviMode(AMapNaviView.CAR_UP_MODE)
 
         statusText = findViewById(R.id.statusText)
+        voiceStatus = findViewById(R.id.voiceStatus)
         copilotText = findViewById(R.id.copilotText)
         transcriptText = findViewById(R.id.transcriptText)
         transcriptScroll = findViewById(R.id.transcriptScroll)
@@ -138,6 +141,8 @@ class MainActivity : AppCompatActivity() {
         expandButton.setOnClickListener { togglePanel() }
 
         tts = AndroidTextToSpeech(applicationContext)
+        refreshVoiceStatus()
+        mainHandler.postDelayed({ refreshVoiceStatus() }, 1500L)
         copilot = CopilotEngine(
             config = AppConfig(applicationContext),
             llm = OpenAiCompatibleProvider(),
@@ -159,6 +164,7 @@ class MainActivity : AppCompatActivity() {
                 }
             },
             onUserText = { text -> appendTranscript(getString(R.string.transcript_user), text) },
+            onListenError = { msg -> renderOnMain { statusText.text = "听不清：$msg" } },
         )
 
         placeSearch = PlaceSearch(applicationContext)
@@ -175,6 +181,11 @@ class MainActivity : AppCompatActivity() {
         if (AppConfig(applicationContext).consumeFirstLaunch()) {
             openSettings()
         }
+    }
+
+    private fun refreshVoiceStatus() {
+        val asrOk = SpeechRecognizer.isRecognitionAvailable(this)
+        voiceStatus.text = "${tts.status()} · 识别:${if (asrOk) "可用" else "不可用"}"
     }
 
     private fun handleLocationFix(location: AMapLocation) {
