@@ -48,10 +48,18 @@ class AmapEnRouteDataSource(context: Context) : EnRouteDataSource, AMapLocationL
     @Volatile
     private var onFirstFix: ((AMapLocation) -> Unit)? = null
 
-    /** Starts continuous location; [onAreaChanged] fires when province+city changes. */
-    fun start(onAreaChanged: (AdminArea) -> Unit, onFirstFix: (AMapLocation) -> Unit = {}) {
+    @Volatile
+    private var onLocation: ((AMapLocation) -> Unit)? = null
+
+    /** Starts continuous location; [onLocation] fires on every fix, [onAreaChanged] on province/city change. */
+    fun start(
+        onAreaChanged: (AdminArea) -> Unit,
+        onFirstFix: (AMapLocation) -> Unit = {},
+        onLocation: (AMapLocation) -> Unit = {},
+    ) {
         this.onAreaChanged = onAreaChanged
         this.onFirstFix = onFirstFix
+        this.onLocation = onLocation
         firstFix = true
         client.startLocation()
     }
@@ -60,6 +68,7 @@ class AmapEnRouteDataSource(context: Context) : EnRouteDataSource, AMapLocationL
         client.stopLocation()
         onAreaChanged = null
         onFirstFix = null
+        onLocation = null
     }
 
     /** Latest full location fix (lat/lng + address), or null before the first successful fix. */
@@ -83,6 +92,8 @@ class AmapEnRouteDataSource(context: Context) : EnRouteDataSource, AMapLocationL
         val first = firstFix
         firstFix = false
         cachedArea = area
+        val everyFix = onLocation
+        scope.launch { everyFix?.invoke(location) }
         if (first) {
             val callback = onFirstFix
             scope.launch { callback?.invoke(location) }

@@ -16,8 +16,12 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.amap.api.location.AMapLocation
+import com.amap.api.maps.AMap
 import com.amap.api.maps.CameraUpdateFactory
+import com.amap.api.maps.model.BitmapDescriptorFactory
 import com.amap.api.maps.model.LatLng
+import com.amap.api.maps.model.Marker
+import com.amap.api.maps.model.MarkerOptions
 import com.amap.api.navi.AMapNaviView
 import com.google.android.material.button.MaterialButton
 import com.qmxz.pilotbot.asr.AndroidSpeechToText
@@ -62,6 +66,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tts: AndroidTextToSpeech
     private lateinit var enRoute: AmapEnRouteDataSource
     private lateinit var placeSearch: PlaceSearch
+    private var aMap: AMap? = null
+    private var locationMarker: Marker? = null
+    private val aroundMarkers = mutableListOf<Marker>()
     private val transcript = StringBuilder()
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -112,6 +119,8 @@ class MainActivity : AppCompatActivity() {
         naviView = findViewById(R.id.naviView)
         naviView.onCreate(savedInstanceState)
         naviView.setNaviMode(AMapNaviView.CAR_UP_MODE)
+        aMap = naviView.getMap()
+        setupMapClick()
 
         statusText = findViewById(R.id.statusText)
         voiceStatus = findViewById(R.id.voiceStatus)
@@ -129,6 +138,8 @@ class MainActivity : AppCompatActivity() {
         panelBody = findViewById(R.id.panelBody)
 
         findViewById<MaterialButton>(R.id.searchButton).setOnClickListener { doSearch() }
+        findViewById<MaterialButton>(R.id.locateButton).setOnClickListener { onLocateClick() }
+        findViewById<MaterialButton>(R.id.aroundButton).setOnClickListener { onAroundClick() }
         findViewById<MaterialButton>(R.id.simulateButton).setOnClickListener {
             copilot.speakAbout(getString(R.string.simulated_broadcast_text))
         }
@@ -170,7 +181,11 @@ class MainActivity : AppCompatActivity() {
         placeSearch = PlaceSearch(applicationContext)
         enRoute = AmapEnRouteDataSource(applicationContext)
         // Locate immediately on launch (map + copilot know the real position).
-        enRoute.start(onAreaChanged = {}, onFirstFix = { handleLocationFix(it) })
+        enRoute.start(
+            onAreaChanged = {},
+            onFirstFix = { handleLocationFix(it) },
+            onLocation = { loc -> updateLocationMarker(loc) },
+        )
 
         navigationProvider = AmapNavigationProvider(applicationContext)
         navigationProvider.addListener(naviListener)
@@ -191,9 +206,93 @@ class MainActivity : AppCompatActivity() {
     private fun handleLocationFix(location: AMapLocation) {
         val desc = location.address ?: "${location.latitude},${location.longitude}"
         copilot.updateLocation(desc)
-        naviView.getMap()?.animateCamera(
+        updateLocationMarker(location)
+        aMap?.animateCamera(
             CameraUpdateFactory.newLatLngZoom(LatLng(location.latitude, location.longitude), 15f),
         )
+    }
+
+    /** 「定位」：把相机移到当前位置并显示/更新大头针。 */
+    private fun onLocateClick() {
+        val loc = enRoute.latestLocation()
+        if (loc == null) {
+            statusText.text = getString(R.string.search_waiting_location)
+            return
+        }
+        updateLocationMarker(loc)
+        aMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(loc.latitude, loc.longitude), 16f))
+        statusText.text = loc.address ?: "定位成功"
+    }
+
+    /** 每次定位 fix 更新大头针位置（复用同一 marker，避免堆叠）。 */
+    private fun updateLocationMarker(location: AMapLocation) {
+        val map = aMap ?: return
+        val latLng = LatLng(location.latitude, location.longitude)
+        val existing = locationMarker
+        if (existing != null) {
+            existing.position = latLng
+        } else {
+            locationMarker = map.addMarker(
+                MarkerOptions()
+                    .position(latLng)
+                    .title(location.address ?: "当前位置")
+                    .icon(BitmapDescriptorFactory.defaultMarker()),
+            )
+        }
+    }
+
+    /** 「周边」：搜当前位置 500m 内 POI，散落大头针。 */
+    private fun onAroundClick() {
+        val loc = enRoute.latestLocation()
+        if (loc == null) {
+            statusText.text = getString(R.string.search_waiting_location)
+            return
+        }
+        statusText.text = getString(R.string.searching)
+        placeSearch.searchAround(loc.latitude, loc.longitude, 500) { result ->
+            result.onSuccess { list ->
+                renderOnMain { showAroundMarkers(list) }
+            }.onFailure { e ->
+                renderOnMain { statusText.text = "周边搜索失败：${e.message}" }
+            }
+        }
+    }
+
+    private fun showAroundMarkers(results: List<PlaceResult>) {
+        val map = aMap ?: return
+        aroundMarkers.forEach { it.remove() }
+        aroundMarkers.clear()
+        results.forEach { place ->
+            aroundMarkers += map.addMarker(
+                MarkerOptions()
+                    .position(LatLng(place.lat, place.lng))
+                    .title(place.title)
+                    .snippet(place.snippet)
+                    .icon(BitmapDescriptorFactory.defaultMarker()),
+            )
+        }
+        statusText.text = "附近找到 ${results.size} 个地点，点大头针看详情"
+    }
+
+    /** Marker 点击显示气泡（title + snippet）。 */
+    private fun setupMapClick() {
+        val map = aMap ?: return
+        map.setOnMarkerClickListener { marker ->
+            marker.showInfoWindow()
+            true
+        }
+        map.setInfoWindowAdapter(object : AMap.InfoWindowAdapter {
+            override fun getInfoWindow(marker: Marker): View = makeInfoView(marker)
+
+            override fun getInfoContents(marker: Marker): View = makeInfoView(marker)
+        })
+    }
+
+    private fun makeInfoView(marker: Marker): View = TextView(this).apply {
+        text = "${marker.title ?: ""}\n${marker.snippet ?: ""}"
+        setPadding(16, 10, 16, 10)
+        setTextColor(android.graphics.Color.BLACK)
+        background = android.graphics.drawable.ColorDrawable(android.graphics.Color.WHITE)
     }
 
     private fun doSearch() {
@@ -316,6 +415,7 @@ class MainActivity : AppCompatActivity() {
                 )
             },
             onFirstFix = { handleLocationFix(it) },
+            onLocation = { loc -> updateLocationMarker(loc) },
         )
     }
 

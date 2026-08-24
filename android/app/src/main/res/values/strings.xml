@@ -23,6 +23,8 @@
     <string name="narration_area_format">你正进入 %1$s%2$s，跟司机讲讲这里有什么值得提的。</string>
     <string name="search_hint">搜索目的地…</string>
     <string name="search_action">搜索</string>
+    <string name="locate_btn">定位</string>
+    <string name="around_btn">周边</string>
     <string name="expand_panel">▲</string>
     <string name="collapse_panel">▼</string>
     <string name="search_waiting_location">等待定位，稍后再试</string>
