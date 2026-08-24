@@ -1,14 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:layout_height="match_parent">
+
+    <com.amap.api.navi.AMapNaviView
+        android:id="@+id/naviView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#E8FFFFFF"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:padding="16dp">
 
         <TextView
             android:id="@+id/statusText"
@@ -16,30 +22,31 @@
             android:layout_height="wrap_content"
             android:gravity="center"
             android:text="@string/status_ready"
-            android:textAppearance="@style/TextAppearance.Material3.BodyLarge" />
+            android:textAppearance="@style/TextAppearance.Material3.BodyMedium" />
 
         <TextView
             android:id="@+id/copilotText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="8dp"
             android:gravity="center"
+            android:maxLines="2"
             android:text="@string/copilot_default"
-            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+            android:textAppearance="@style/TextAppearance.Material3.BodySmall"
             android:textIsSelectable="true" />
 
         <ScrollView
             android:id="@+id/transcriptScroll"
             android:layout_width="match_parent"
-            android:layout_height="160dp"
-            android:layout_marginTop="12dp"
+            android:layout_height="100dp"
+            android:layout_marginTop="8dp"
             android:background="@android:drawable/edit_text">
 
             <TextView
                 android:id="@+id/transcriptText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:padding="8dp"
+                android:padding="6dp"
                 android:textAppearance="@style/TextAppearance.Material3.BodySmall"
                 android:textIsSelectable="true" />
         </ScrollView>
@@ -47,7 +54,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="8dp"
             android:orientation="horizontal">
 
             <EditText
@@ -57,7 +64,7 @@
                 android:layout_weight="1"
                 android:hint="@string/chat_input_hint"
                 android:inputType="text"
-                android:maxLines="3" />
+                android:maxLines="2" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/sendButton"
@@ -71,35 +78,35 @@
             android:id="@+id/simulateButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="8dp"
             android:text="@string/simulate_broadcast" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/simulateNarrationButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="8dp"
             android:text="@string/simulate_narration" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/micButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="8dp"
             android:text="@string/mic_button" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/startNavigationButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="8dp"
             android:text="@string/start_test_navigation" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/stopNavigationButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="8dp"
             android:enabled="false"
             android:text="@string/stop_navigation" />
 
@@ -107,8 +114,8 @@
             android:id="@+id/settingsButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="8dp"
             android:text="@string/open_settings" />
 
     </LinearLayout>
-</ScrollView>
+</FrameLayout>

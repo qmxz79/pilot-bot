@@ -13,6 +13,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.amap.api.navi.AMapNaviView
 import com.google.android.material.button.MaterialButton
 import com.qmxz.pilotbot.asr.AndroidSpeechToText
 import com.qmxz.pilotbot.config.AppConfig
@@ -46,6 +47,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var voiceController: VoiceController
     private lateinit var tts: AndroidTextToSpeech
     private lateinit var enRoute: AmapEnRouteDataSource
+    private lateinit var naviView: AMapNaviView
     private val transcript = StringBuilder()
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -92,6 +94,10 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        naviView = findViewById(R.id.naviView)
+        naviView.onCreate(savedInstanceState)
+        naviView.setNaviMode(AMapNaviView.CAR_UP_MODE)
 
         statusText = findViewById(R.id.statusText)
         copilotText = findViewById(R.id.copilotText)
@@ -267,8 +273,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        naviView.onResume()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        naviView.onPause()
+    }
+
     override fun onDestroy() {
         destroyed = true
+        naviView.onDestroy()
         mainHandler.removeCallbacksAndMessages(null)
         navigationProvider.removeListener(naviListener)
         enRoute.destroy()
