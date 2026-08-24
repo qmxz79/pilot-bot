@@ -46,13 +46,12 @@
         android:orientation="vertical"
         android:visibility="gone">
 
-        <TextView
+        <LinearLayout
             android:id="@+id/searchResultList"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:padding="8dp"
-            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
-            android:textIsSelectable="false" />
+            android:orientation="vertical"
+            android:padding="8dp" />
     </LinearLayout>
 
     <!-- 底部控制面板：常显条 + 可折叠容器 -->
