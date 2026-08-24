@@ -40,14 +40,15 @@ class SettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
-        // Probe installed TTS engines (getEngines() is instance-only in API 34; the probe is
+        // Probe installed TTS engines + default engine (instance-only in API 34; the probe is
         // throwaway and independent of engine init success).
         val probe = TextToSpeech(applicationContext) {}
         val hasTtsEngine = probe.getEngines().isNotEmpty()
+        val hasTtsDefault = !probe.getDefaultEngine().isNullOrEmpty()
         runCatching { probe.shutdown() }
 
         val ttsWarning = findViewById<View>(R.id.ttsWarning)
-        if (hasTtsEngine) {
+        if (hasTtsEngine && hasTtsDefault) {
             ttsWarning.visibility = View.GONE
         } else {
             ttsWarning.visibility = View.VISIBLE
