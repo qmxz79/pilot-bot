@@ -38,12 +38,14 @@ class AndroidTextToSpeech(
     private var available = false
 
     @Volatile
-    private var statusText = "语音初始化中…"
+    private var statusText = "语音:初始化中…"
+
+    var onStatusChanged: ((String) -> Unit)? = null
 
     override val isAvailable: Boolean
         get() = available
 
-    /** Human-readable TTS state for the UI: 可用 / 语言受限 / 初始化失败(状态码) / 初始化中. */
+    /** Human-readable TTS state for the UI: 语音:就绪 / 语音:异常 / 语音:初始化中. */
     fun status(): String = statusText
 
     init {
@@ -87,12 +89,14 @@ class AndroidTextToSpeech(
             })
             available = true
             ready.complete(Unit)
+            onStatusChanged?.invoke(statusText)
         } else if (attemptsLeft > 1) {
             runCatching { instance.shutdown() }
             Handler(Looper.getMainLooper()).postDelayed({ initWithRetry(attemptsLeft - 1) }, 1000L)
         } else {
-            statusText = "语音不可用(初始化失败, 状态 $status)"
+            statusText = "语音:不可用($status)"
             ready.complete(Unit)
+            onStatusChanged?.invoke(statusText)
         }
     }
 
@@ -101,9 +105,9 @@ class AndroidTextToSpeech(
         val r = instance.setLanguage(Locale.CHINA)
         statusText = if (r == AndroidTts.LANG_MISSING_DATA || r == AndroidTts.LANG_NOT_SUPPORTED) {
             instance.setLanguage(Locale.getDefault())
-            "语音可用(中文声包缺失, 已用系统默认语言)"
+            "语音:就绪(默认语言)"
         } else {
-            "语音可用"
+            "语音:就绪"
         }
     }
 

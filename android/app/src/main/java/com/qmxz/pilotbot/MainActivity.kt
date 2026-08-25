@@ -32,6 +32,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.qmxz.pilotbot.asr.AndroidSpeechToText
+import com.qmxz.pilotbot.asr.SmartSpeechToText
 import com.qmxz.pilotbot.config.AppConfig
 import com.qmxz.pilotbot.copilot.CopilotEngine
 import com.qmxz.pilotbot.enroute.AmapEnRouteDataSource
@@ -83,6 +84,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var copilot: CopilotEngine
     private lateinit var voiceController: VoiceController
     private lateinit var tts: AndroidTextToSpeech
+    private lateinit var smartStt: SmartSpeechToText
     private lateinit var enRoute: AmapEnRouteDataSource
     private lateinit var placeSearch: PlaceSearch
 
@@ -220,9 +222,13 @@ class MainActivity : AppCompatActivity() {
 
         updateBubbleTag()
 
-        tts = AndroidTextToSpeech(applicationContext)
+        tts = AndroidTextToSpeech(applicationContext).apply {
+            onStatusChanged = {
+                renderOnMain { refreshVoiceStatus() }
+            }
+        }
+        smartStt = SmartSpeechToText(applicationContext, appConfig)
         refreshVoiceStatus()
-        mainHandler.postDelayed({ refreshVoiceStatus() }, 1500L)
 
         copilot = CopilotEngine(
             config = appConfig,
@@ -237,20 +243,18 @@ class MainActivity : AppCompatActivity() {
 
         voiceController = VoiceController(
             config = appConfig,
-            speechToText = AndroidSpeechToText(applicationContext),
+            speechToText = smartStt,
             copilot = copilot,
             onListeningState = { listening ->
                 renderOnMain {
-                    micButton.text = getString(
-                        if (listening) R.string.mic_button_listening else R.string.mic_button,
-                    )
+                    micButton.text = if (listening) "🎙️ 正在倾听中..." else getString(R.string.mic_button)
                 }
             },
             onUserText = { text -> appendTranscript(getString(R.string.transcript_user), text) },
             onListenError = { msg ->
                 renderOnMain {
                     roadNameText.text = "听不清：$msg"
-                    Toast.makeText(this, "语音识别未返回结果（$msg），建议使用键盘打字或输入法语音输入", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "语音识别提示：$msg", Toast.LENGTH_SHORT).show()
                 }
             },
             onUtterance = { utterance -> renderOnMain { handleUserUtterance(utterance) } },
@@ -273,14 +277,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        naviView.onResume()
+        updateBubbleTag()
+        refreshVoiceStatus()
+    }
+
     private fun updateBubbleTag() {
         val personaName = appConfig.currentPersona().name.ifBlank { "小伴" }
         copilotBubbleTag.text = "🤖 副驾「$personaName」说："
     }
 
     private fun refreshVoiceStatus() {
-        val asrOk = SpeechRecognizer.isRecognitionAvailable(this)
-        voiceStatus.text = "${tts.status()} · 识别:${if (asrOk) "就绪" else "不可用"}"
+        voiceStatus.text = "${tts.status()} · ${smartStt.status()}"
     }
 
     /**
@@ -675,17 +685,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onMicPressed() {
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            Toast.makeText(
-                this,
-                "提示：此手机无内置语音识别服务，可直接在下方打字，或使用输入法自带的语音麦克风说话！",
-                Toast.LENGTH_LONG,
-            ).show()
-            chatInput.requestFocus()
-            val imm = getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager
-            imm?.showSoftInput(chatInput, InputMethodManager.SHOW_IMPLICIT)
-            return
-        }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         ) {
@@ -822,12 +821,6 @@ class MainActivity : AppCompatActivity() {
         mainHandler.post {
             if (!destroyed && !isFinishing && !isDestroyed) block()
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        naviView.onResume()
-        updateBubbleTag()
     }
 
     override fun onPause() {

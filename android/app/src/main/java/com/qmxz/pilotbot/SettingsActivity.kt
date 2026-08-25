@@ -57,10 +57,9 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        findViewById<View>(R.id.asrWarning).visibility =
-            if (SpeechRecognizer.isRecognitionAvailable(this)) View.GONE else View.VISIBLE
-
         val config = AppConfig(applicationContext)
+        findViewById<View>(R.id.asrWarning).visibility =
+            if (config.endpoint.apiKey.isNotBlank() || SpeechRecognizer.isRecognitionAvailable(this)) View.GONE else View.VISIBLE
         baseUrl = findViewById(R.id.baseUrlInput)
         apiKey = findViewById(R.id.apiKeyInput)
         model = findViewById(R.id.modelInput)
