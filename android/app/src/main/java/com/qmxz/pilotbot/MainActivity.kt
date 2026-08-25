@@ -7,11 +7,14 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.speech.SpeechRecognizer
+import android.view.LayoutInflater
 import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -24,11 +27,15 @@ import com.amap.api.maps.model.Marker
 import com.amap.api.maps.model.MarkerOptions
 import com.amap.api.navi.AMapNaviView
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.textfield.TextInputEditText
 import com.qmxz.pilotbot.asr.AndroidSpeechToText
 import com.qmxz.pilotbot.config.AppConfig
 import com.qmxz.pilotbot.copilot.CopilotEngine
 import com.qmxz.pilotbot.enroute.AmapEnRouteDataSource
 import com.qmxz.pilotbot.llm.OpenAiCompatibleProvider
+import com.qmxz.pilotbot.memory.MemoryStore
+import com.qmxz.pilotbot.memory.UserMemory
 import com.qmxz.pilotbot.navi.AmapNavigationProvider
 import com.qmxz.pilotbot.navi.GeoPoint
 import com.qmxz.pilotbot.navi.NaviError
@@ -39,14 +46,21 @@ import com.qmxz.pilotbot.search.PlaceResult
 import com.qmxz.pilotbot.search.PlaceSearch
 import com.qmxz.pilotbot.tts.AndroidTextToSpeech
 import com.qmxz.pilotbot.voice.VoiceController
+import com.qmxz.pilotbot.voice.intent.VoiceIntent
+import com.qmxz.pilotbot.voice.intent.VoiceIntentParser
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
 
-/** Harness: fullscreen map + nav + M1 copilot loop + M2 voice chat + destination search. */
+/**
+ * Driver Mode UI & Automotive Experience Lead:
+ * Fullscreen AMap navigation + Driver big-card view + Copilot companion bubble + Full Voice Intent Dispatcher.
+ */
 class MainActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
+    private lateinit var roadNameText: TextView
     private lateinit var voiceStatus: TextView
+    private lateinit var copilotBubbleTag: TextView
     private lateinit var copilotText: TextView
     private lateinit var transcriptText: TextView
     private lateinit var transcriptScroll: ScrollView
@@ -55,17 +69,21 @@ class MainActivity : AppCompatActivity() {
     private lateinit var startButton: MaterialButton
     private lateinit var stopButton: MaterialButton
     private lateinit var searchInput: EditText
-    private lateinit var searchResults: LinearLayout
+    private lateinit var searchResults: View
     private lateinit var searchResultList: LinearLayout
     private lateinit var expandButton: MaterialButton
     private lateinit var panelBody: LinearLayout
     private lateinit var naviView: AMapNaviView
+
+    private lateinit var appConfig: AppConfig
+    private lateinit var memoryStore: MemoryStore
     private lateinit var navigationProvider: AmapNavigationProvider
     private lateinit var copilot: CopilotEngine
     private lateinit var voiceController: VoiceController
     private lateinit var tts: AndroidTextToSpeech
     private lateinit var enRoute: AmapEnRouteDataSource
     private lateinit var placeSearch: PlaceSearch
+
     private var aMap: AMap? = null
     private var locationMarker: Marker? = null
     private val aroundMarkers = mutableListOf<Marker>()
@@ -78,43 +96,55 @@ class MainActivity : AppCompatActivity() {
     private val naviListener = object : NaviEventListener {
         override fun onNaviStateChanged(state: NaviState) = renderOnMain {
             copilot.updateNaviState(state)
-            statusText.text = getString(
-                R.string.navi_state_format,
-                state.remainingDistanceMeters,
-                state.remainingTimeSeconds,
-                state.currentRoadName ?: getString(R.string.unknown_road),
-            )
+            val distStr = if (state.remainingDistanceMeters >= 1000) {
+                String.format("%.1f 公里", state.remainingDistanceMeters / 1000.0)
+            } else {
+                "${state.remainingDistanceMeters} 米"
+            }
+            val timeMinutes = Math.max(1, state.remainingTimeSeconds / 60)
+            val timeStr = if (timeMinutes >= 60) {
+                "${timeMinutes / 60} 小时 ${timeMinutes % 60} 分钟"
+            } else {
+                "$timeMinutes 分钟"
+            }
+
+            statusText.text = "剩余 $distStr · 约 $timeStr"
+            roadNameText.text = "当前道路：${state.currentRoadName ?: getString(R.string.unknown_road)}"
         }
 
         override fun onNaviText(text: String) = renderOnMain {
-            statusText.text = getString(R.string.navi_text_format, text)
+            roadNameText.text = getString(R.string.navi_text_format, text)
             copilot.speakAbout(text)
         }
 
         override fun onRouteCalculated(route: RoutePlan) = renderOnMain {
-            statusText.text = getString(
-                R.string.route_calculated_format,
-                route.totalDistanceMeters ?: 0,
-                route.totalTimeSeconds ?: 0,
-            )
+            val dist = (route.totalDistanceMeters ?: 0) / 1000.0
+            val time = Math.max(1, (route.totalTimeSeconds ?: 0) / 60)
+            statusText.text = String.format("路线已就绪：%.1f 公里 · 约 %d 分钟", dist, time)
         }
 
         override fun onArrived() = renderOnMain {
             statusText.setText(R.string.status_arrived)
+            roadNameText.setText(R.string.nav_standby_road)
+            startButton.visibility = View.VISIBLE
             startButton.isEnabled = true
-            stopButton.isEnabled = false
+            stopButton.visibility = View.GONE
         }
 
         override fun onNaviError(error: NaviError) = renderOnMain {
             statusText.text = getString(R.string.navi_error_format, error.code, error.message)
+            startButton.visibility = View.VISIBLE
             startButton.isEnabled = true
-            stopButton.isEnabled = false
+            stopButton.visibility = View.GONE
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        appConfig = AppConfig(applicationContext)
+        memoryStore = MemoryStore(applicationContext)
 
         naviView = findViewById(R.id.naviView)
         naviView.onCreate(savedInstanceState)
@@ -123,7 +153,9 @@ class MainActivity : AppCompatActivity() {
         setupMapClick()
 
         statusText = findViewById(R.id.statusText)
+        roadNameText = findViewById(R.id.roadNameText)
         voiceStatus = findViewById(R.id.voiceStatus)
+        copilotBubbleTag = findViewById(R.id.copilotBubbleTag)
         copilotText = findViewById(R.id.copilotText)
         transcriptText = findViewById(R.id.transcriptText)
         transcriptScroll = findViewById(R.id.transcriptScroll)
@@ -137,34 +169,51 @@ class MainActivity : AppCompatActivity() {
         expandButton = findViewById(R.id.expandButton)
         panelBody = findViewById(R.id.panelBody)
 
+        // Top action buttons
         findViewById<MaterialButton>(R.id.searchButton).setOnClickListener { doSearch() }
+        findViewById<MaterialButton>(R.id.memoryButton).setOnClickListener { showMemoryDialog() }
+        findViewById<MaterialButton>(R.id.settingsButton).setOnClickListener { openSettings() }
+
+        // Quick destination & POI shortcut buttons
+        findViewById<MaterialButton>(R.id.quickHomeButton).setOnClickListener { handleUserUtterance("回家") }
+        findViewById<MaterialButton>(R.id.quickCompanyButton).setOnClickListener { handleUserUtterance("去公司") }
+        findViewById<MaterialButton>(R.id.quickGasButton).setOnClickListener { handleUserUtterance("附近加油站") }
+        findViewById<MaterialButton>(R.id.quickChargeButton).setOnClickListener { handleUserUtterance("附近充电桩") }
         findViewById<MaterialButton>(R.id.locateButton).setOnClickListener { onLocateClick() }
         findViewById<MaterialButton>(R.id.aroundButton).setOnClickListener { onAroundClick() }
+
+        // Driver card action buttons
+        micButton.setOnClickListener { onMicPressed() }
+        startButton.setOnClickListener { requestLocationThenStartNavigation() }
+        stopButton.setOnClickListener { stopCurrentNavigation() }
+        expandButton.setOnClickListener { togglePanel() }
+        findViewById<MaterialButton>(R.id.sendButton).setOnClickListener { sendChatText() }
         findViewById<MaterialButton>(R.id.simulateButton).setOnClickListener {
             copilot.speakAbout(getString(R.string.simulated_broadcast_text))
         }
         findViewById<MaterialButton>(R.id.simulateNarrationButton).setOnClickListener {
             copilot.narrate(getString(R.string.simulated_narration_text))
         }
-        findViewById<MaterialButton>(R.id.settingsButton).setOnClickListener { openSettings() }
-        micButton.setOnClickListener { onMicPressed() }
-        findViewById<MaterialButton>(R.id.sendButton).setOnClickListener { sendChatText() }
-        expandButton.setOnClickListener { togglePanel() }
+
+        updateBubbleTag()
 
         tts = AndroidTextToSpeech(applicationContext)
         refreshVoiceStatus()
         mainHandler.postDelayed({ refreshVoiceStatus() }, 1500L)
+
         copilot = CopilotEngine(
-            config = AppConfig(applicationContext),
+            config = appConfig,
             llm = OpenAiCompatibleProvider(),
             tts = tts,
+            memoryStore = memoryStore,
             onCopilotText = { text -> renderOnMain { copilotText.text = text } },
             onCopilotDone = { text -> appendTranscript(getString(R.string.transcript_copilot), text) },
             onSpeakingStart = { voiceController.onCopilotSpeakingStart() },
             onSpeakingEnd = { voiceController.onCopilotSpeakingEnd() },
         )
+
         voiceController = VoiceController(
-            config = AppConfig(applicationContext),
+            config = appConfig,
             speechToText = AndroidSpeechToText(applicationContext),
             copilot = copilot,
             onListeningState = { listening ->
@@ -175,12 +224,12 @@ class MainActivity : AppCompatActivity() {
                 }
             },
             onUserText = { text -> appendTranscript(getString(R.string.transcript_user), text) },
-            onListenError = { msg -> renderOnMain { statusText.text = "听不清：$msg" } },
+            onListenError = { msg -> renderOnMain { roadNameText.text = "听不清：$msg" } },
+            onUtterance = { utterance -> renderOnMain { handleUserUtterance(utterance) } },
         )
 
         placeSearch = PlaceSearch(applicationContext)
         enRoute = AmapEnRouteDataSource(applicationContext)
-        // Locate immediately on launch (map + copilot know the real position).
         enRoute.start(
             onAreaChanged = {},
             onFirstFix = { handleLocationFix(it) },
@@ -189,18 +238,287 @@ class MainActivity : AppCompatActivity() {
 
         navigationProvider = AmapNavigationProvider(applicationContext)
         navigationProvider.addListener(naviListener)
-        startButton.setOnClickListener { requestLocationThenStartNavigation() }
-        stopButton.setOnClickListener { stopCurrentNavigation() }
 
-        // First-run guidance: jump straight into settings to wire model/persona/voice mode.
-        if (AppConfig(applicationContext).consumeFirstLaunch()) {
+        // First-run guidance: jump straight into settings
+        if (appConfig.consumeFirstLaunch()) {
             openSettings()
         }
     }
 
+    private fun updateBubbleTag() {
+        val personaName = appConfig.currentPersona().name.ifBlank { "小伴" }
+        copilotBubbleTag.text = "🤖 副驾「$personaName」说："
+    }
+
     private fun refreshVoiceStatus() {
         val asrOk = SpeechRecognizer.isRecognitionAvailable(this)
-        voiceStatus.text = "${tts.status()} · 识别:${if (asrOk) "可用" else "不可用"}"
+        voiceStatus.text = "${tts.status()} · 识别:${if (asrOk) "就绪" else "不可用"}"
+    }
+
+    /**
+     * Complete Voice Intent Dispatcher:
+     * - NavigateTo(dest) -> PlaceSearch.search -> start navigation
+     * - GoHome / GoCompany -> MemoryStore -> PlaceSearch.search -> start navigation
+     * - SearchNearby(kw) -> PlaceSearch.searchAround -> announce results
+     * - RememberFact(fact) -> MemoryStore.addFact -> confirm
+     * - Chat -> CopilotEngine.chat
+     */
+    private fun handleUserUtterance(utterance: String) {
+        val intent = VoiceIntentParser.parse(utterance)
+        when (intent) {
+            is VoiceIntent.NavigateTo -> {
+                val dest = intent.destination
+                copilot.speakDirect("正在为你搜索前往 $dest 的路线…")
+                val cityCode = enRoute.latestLocation()?.cityCode
+                placeSearch.search(dest, cityCode) { result ->
+                    result.onSuccess { list ->
+                        renderOnMain {
+                            if (list.isNotEmpty()) {
+                                val place = list.first()
+                                copilot.speakDirect("找到目的地 ${place.title}，出发！")
+                                startNaviTo(place)
+                            } else {
+                                copilot.speakDirect("没找到目的地 $dest，请换个地名试试。")
+                            }
+                        }
+                    }.onFailure { e ->
+                        renderOnMain {
+                            copilot.speakDirect("搜索 $dest 失败：${e.message}")
+                        }
+                    }
+                }
+            }
+
+            is VoiceIntent.GoHome -> {
+                val home = memoryStore.getMemory().homeAddress
+                if (home.isNotBlank()) {
+                    copilot.speakDirect("好嘞，准备带你回家！正在规划前往 $home 的路线。")
+                    val cityCode = enRoute.latestLocation()?.cityCode
+                    placeSearch.search(home, cityCode) { result ->
+                        result.onSuccess { list ->
+                            renderOnMain {
+                                if (list.isNotEmpty()) {
+                                    startNaviTo(list.first())
+                                } else {
+                                    copilot.speakDirect("没有找到家地址 $home，请在记忆管理中核对。")
+                                }
+                            }
+                        }.onFailure { e ->
+                            renderOnMain {
+                                copilot.speakDirect("搜索家地址失败：${e.message}")
+                            }
+                        }
+                    }
+                } else {
+                    copilot.speakDirect(getString(R.string.home_not_set))
+                    showMemoryDialog()
+                }
+            }
+
+            is VoiceIntent.GoCompany -> {
+                val company = memoryStore.getMemory().companyAddress
+                if (company.isNotBlank()) {
+                    copilot.speakDirect("收到，准备去公司！正在规划前往 $company 的路线。")
+                    val cityCode = enRoute.latestLocation()?.cityCode
+                    placeSearch.search(company, cityCode) { result ->
+                        result.onSuccess { list ->
+                            renderOnMain {
+                                if (list.isNotEmpty()) {
+                                    startNaviTo(list.first())
+                                } else {
+                                    copilot.speakDirect("没有找到公司地址 $company，请在记忆管理中核对。")
+                                }
+                            }
+                        }.onFailure { e ->
+                            renderOnMain {
+                                copilot.speakDirect("搜索公司地址失败：${e.message}")
+                            }
+                        }
+                    }
+                } else {
+                    copilot.speakDirect(getString(R.string.company_not_set))
+                    showMemoryDialog()
+                }
+            }
+
+            is VoiceIntent.SearchNearby -> {
+                val kw = intent.keyword
+                val loc = enRoute.latestLocation()
+                if (loc == null) {
+                    copilot.speakDirect(getString(R.string.search_waiting_location))
+                    return
+                }
+                copilot.speakDirect("正在搜索附近的 $kw…")
+                placeSearch.searchAround(loc.latitude, loc.longitude, 3000, kw) { result ->
+                    result.onSuccess { list ->
+                        renderOnMain {
+                            showAroundMarkers(list)
+                            if (list.isNotEmpty()) {
+                                val first = list.first()
+                                copilot.speakDirect("附近找到 ${list.size} 个 $kw，最近的是 ${first.title}。")
+                            } else {
+                                copilot.speakDirect("附近 3 公里内没有找到 $kw。")
+                            }
+                        }
+                    }.onFailure { e ->
+                        renderOnMain {
+                            copilot.speakDirect("搜索附近 $kw 失败：${e.message}")
+                        }
+                    }
+                }
+            }
+
+            is VoiceIntent.RememberFact -> {
+                val fact = intent.fact
+                memoryStore.addFact(fact)
+                copilot.speakDirect("好嘞，我记住了！")
+            }
+
+            is VoiceIntent.Chat -> {
+                copilot.chat(intent.text)
+            }
+        }
+    }
+
+    /** Shows the Memory Management dialog to view and edit driver profile and preferences. */
+    private fun showMemoryDialog() {
+        val view = LayoutInflater.from(this).inflate(R.layout.dialog_memory_management, null)
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setView(view)
+            .create()
+
+        val currentMemory = memoryStore.getMemory()
+        val userNameInput = view.findViewById<TextInputEditText>(R.id.memUserNameInput)
+        val homeInput = view.findViewById<TextInputEditText>(R.id.memHomeInput)
+        val companyInput = view.findViewById<TextInputEditText>(R.id.memCompanyInput)
+        val prefContainer = view.findViewById<LinearLayout>(R.id.memPreferencesContainer)
+        val newPrefInput = view.findViewById<EditText>(R.id.memNewPrefInput)
+        val addPrefButton = view.findViewById<MaterialButton>(R.id.memAddPrefButton)
+        val factsContainer = view.findViewById<LinearLayout>(R.id.memFactsContainer)
+        val newFactInput = view.findViewById<EditText>(R.id.memNewFactInput)
+        val addFactButton = view.findViewById<MaterialButton>(R.id.memAddFactButton)
+        val saveButton = view.findViewById<MaterialButton>(R.id.memSaveButton)
+
+        userNameInput.setText(currentMemory.userName)
+        homeInput.setText(currentMemory.homeAddress)
+        companyInput.setText(currentMemory.companyAddress)
+
+        val workingPreferences = currentMemory.preferences.toMutableList()
+        val workingFacts = currentMemory.facts.toMutableList()
+
+        fun refreshPreferenceViews() {
+            prefContainer.removeAllViews()
+            if (workingPreferences.isEmpty()) {
+                val empty = TextView(this).apply {
+                    text = "暂无偏好记录"
+                    textSize = 12f
+                    setTextColor(0xFF94A3B8.toInt())
+                    setPadding(8, 4, 8, 4)
+                }
+                prefContainer.addView(empty)
+            } else {
+                workingPreferences.forEachIndexed { index, pref ->
+                    val row = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        setPadding(4, 4, 4, 4)
+                    }
+                    val tv = TextView(this).apply {
+                        text = "• $pref"
+                        textSize = 14f
+                        setTextColor(0xFF1E293B.toInt())
+                        layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    }
+                    val delBtn = TextView(this).apply {
+                        text = "✕"
+                        textSize = 14f
+                        setTextColor(0xFFEF4444.toInt())
+                        setPadding(16, 0, 16, 0)
+                        setOnClickListener {
+                            workingPreferences.removeAt(index)
+                            refreshPreferenceViews()
+                        }
+                    }
+                    row.addView(tv)
+                    row.addView(delBtn)
+                    prefContainer.addView(row)
+                }
+            }
+        }
+
+        fun refreshFactViews() {
+            factsContainer.removeAllViews()
+            if (workingFacts.isEmpty()) {
+                val empty = TextView(this).apply {
+                    text = "暂无备忘点滴"
+                    textSize = 12f
+                    setTextColor(0xFF94A3B8.toInt())
+                    setPadding(8, 4, 8, 4)
+                }
+                factsContainer.addView(empty)
+            } else {
+                workingFacts.forEachIndexed { index, fact ->
+                    val row = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        setPadding(4, 4, 4, 4)
+                    }
+                    val tv = TextView(this).apply {
+                        text = "• $fact"
+                        textSize = 14f
+                        setTextColor(0xFF1E293B.toInt())
+                        layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    }
+                    val delBtn = TextView(this).apply {
+                        text = "✕"
+                        textSize = 14f
+                        setTextColor(0xFFEF4444.toInt())
+                        setPadding(16, 0, 16, 0)
+                        setOnClickListener {
+                            workingFacts.removeAt(index)
+                            refreshFactViews()
+                        }
+                    }
+                    row.addView(tv)
+                    row.addView(delBtn)
+                    factsContainer.addView(row)
+                }
+            }
+        }
+
+        addPrefButton.setOnClickListener {
+            val text = newPrefInput.text?.toString()?.trim().orEmpty()
+            if (text.isNotEmpty()) {
+                workingPreferences.add(text)
+                newPrefInput.text?.clear()
+                refreshPreferenceViews()
+            }
+        }
+
+        addFactButton.setOnClickListener {
+            val text = newFactInput.text?.toString()?.trim().orEmpty()
+            if (text.isNotEmpty()) {
+                workingFacts.add(text)
+                newFactInput.text?.clear()
+                refreshFactViews()
+            }
+        }
+
+        refreshPreferenceViews()
+        refreshFactViews()
+
+        saveButton.setOnClickListener {
+            val updated = UserMemory(
+                userName = userNameInput.text?.toString()?.trim().orEmpty(),
+                homeAddress = homeInput.text?.toString()?.trim().orEmpty(),
+                companyAddress = companyInput.text?.toString()?.trim().orEmpty(),
+                preferences = workingPreferences,
+                facts = workingFacts,
+            )
+            memoryStore.saveMemory(updated)
+            Toast.makeText(this, R.string.memory_saved_toast, Toast.LENGTH_SHORT).show()
+            dialog.dismiss()
+        }
+
+        dialog.show()
     }
 
     private fun handleLocationFix(location: AMapLocation) {
@@ -212,7 +530,6 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    /** 「定位」：把相机移到当前位置并显示/更新大头针。 */
     private fun onLocateClick() {
         val loc = enRoute.latestLocation()
         if (loc == null) {
@@ -221,10 +538,9 @@ class MainActivity : AppCompatActivity() {
         }
         updateLocationMarker(loc)
         aMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(loc.latitude, loc.longitude), 16f))
-        statusText.text = loc.address ?: "定位成功"
+        roadNameText.text = loc.address ?: "定位成功"
     }
 
-    /** 每次定位 fix 更新大头针位置（复用同一 marker，避免堆叠）。 */
     private fun updateLocationMarker(location: AMapLocation) {
         val map = aMap ?: return
         val latLng = LatLng(location.latitude, location.longitude)
@@ -241,21 +557,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** 「周边」：搜当前位置 500m 内 POI，散落大头针。 */
     private fun onAroundClick() {
-        val loc = enRoute.latestLocation()
-        if (loc == null) {
-            statusText.text = getString(R.string.search_waiting_location)
-            return
-        }
-        statusText.text = getString(R.string.searching)
-        placeSearch.searchAround(loc.latitude, loc.longitude, 500) { result ->
-            result.onSuccess { list ->
-                renderOnMain { showAroundMarkers(list) }
-            }.onFailure { e ->
-                renderOnMain { statusText.text = "周边搜索失败：${e.message}" }
-            }
-        }
+        handleUserUtterance("周边有什么")
     }
 
     private fun showAroundMarkers(results: List<PlaceResult>) {
@@ -271,10 +574,8 @@ class MainActivity : AppCompatActivity() {
                     .icon(BitmapDescriptorFactory.defaultMarker()),
             )
         }
-        statusText.text = "附近找到 ${results.size} 个地点，点大头针看详情"
     }
 
-    /** Marker 点击显示气泡（title + snippet）。 */
     private fun setupMapClick() {
         val map = aMap ?: return
         map.setOnMarkerClickListener { marker ->
@@ -283,7 +584,6 @@ class MainActivity : AppCompatActivity() {
         }
         map.setInfoWindowAdapter(object : AMap.InfoWindowAdapter {
             override fun getInfoWindow(marker: Marker): View = makeInfoView(marker)
-
             override fun getInfoContents(marker: Marker): View = makeInfoView(marker)
         })
     }
@@ -323,7 +623,10 @@ class MainActivity : AppCompatActivity() {
                     text = "${place.title}\n  ${place.snippet}"
                     textSize = 14f
                     setPadding(12, 8, 12, 8)
-                    setOnClickListener { startNaviTo(place) }
+                    setOnClickListener {
+                        searchResults.visibility = View.GONE
+                        startNaviTo(place)
+                    }
                 }
                 searchResultList.addView(row)
             }
@@ -403,7 +706,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun beginNavigation(start: GeoPoint, destination: GeoPoint) {
-        startButton.isEnabled = false
+        startButton.visibility = View.GONE
+        stopButton.visibility = View.VISIBLE
         stopButton.isEnabled = true
         statusText.setText(R.string.status_calculating_route)
         val route = RoutePlan(start = start, destination = destination)
@@ -420,10 +724,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopCurrentNavigation() {
-        stopButton.isEnabled = false
+        stopButton.visibility = View.GONE
+        startButton.visibility = View.VISIBLE
         startButton.isEnabled = true
-        statusText.setText(R.string.status_navigation_stopped)
+        statusText.setText(R.string.nav_standby_distance_time)
+        roadNameText.setText(R.string.status_navigation_stopped)
         enRoute.stop()
+        copilot.resetFatigueMonitor()
         suspend { navigationProvider.stopNavi() }.startCoroutine(handleCompletion)
     }
 
@@ -438,8 +745,9 @@ class MainActivity : AppCompatActivity() {
                         -1,
                         error.message ?: error.javaClass.simpleName,
                     )
+                    startButton.visibility = View.VISIBLE
                     startButton.isEnabled = true
-                    stopButton.isEnabled = false
+                    stopButton.visibility = View.GONE
                 }
             }
         }
@@ -450,7 +758,7 @@ class MainActivity : AppCompatActivity() {
         if (text.isEmpty()) return
         appendTranscript(getString(R.string.transcript_user), text)
         chatInput.text?.clear()
-        copilot.chat(text)
+        handleUserUtterance(text)
     }
 
     private fun openSettings() {
@@ -480,6 +788,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         naviView.onResume()
+        updateBubbleTag()
     }
 
     override fun onPause() {

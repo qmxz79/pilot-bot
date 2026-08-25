@@ -5,7 +5,9 @@ import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech as AndroidTts
 import android.speech.tts.UtteranceProgressListener
+import com.qmxz.pilotbot.audio.AudioFocusManager
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CompletableDeferred
@@ -20,11 +22,15 @@ import kotlinx.coroutines.withContext
  * If the platform TTS engine is missing/broken, [isAvailable] is false and [speak] becomes a
  * no-op instead of throwing — the copilot degrades to text-only rather than crashing.
  */
-class AndroidTextToSpeech(context: Context) : TextToSpeech {
+class AndroidTextToSpeech(
+    context: Context,
+    private val audioFocusManager: AudioFocusManager = AudioFocusManager(context),
+) : TextToSpeech {
     private val ready = CompletableDeferred<Unit>()
     private val appContext = context.applicationContext
     private lateinit var tts: AndroidTts
-    private val pending = mutableSetOf<String>()
+    private val pending = ConcurrentHashMap.newKeySet<String>()
+    @Volatile
     private var idleCallback: (() -> Unit)? = null
     private val utteranceCounter = AtomicLong(0)
 
@@ -105,6 +111,7 @@ class AndroidTextToSpeech(context: Context) : TextToSpeech {
         if (text.isBlank()) return
         ready.await()
         if (!available) return
+        audioFocusManager.requestDuckFocus()
         val id = "copilot-${utteranceCounter.incrementAndGet()}"
         withContext(Dispatchers.Main) {
             pending.add(id)
@@ -120,6 +127,7 @@ class AndroidTextToSpeech(context: Context) : TextToSpeech {
     }
 
     override fun shutdown() {
+        audioFocusManager.abandonDuckFocus()
         if (::tts.isInitialized) {
             tts.stop()
             tts.shutdown()
@@ -131,6 +139,9 @@ class AndroidTextToSpeech(context: Context) : TextToSpeech {
     }
 
     private fun maybeIdle() {
-        if (pending.isEmpty()) idleCallback?.invoke()
+        if (pending.isEmpty()) {
+            audioFocusManager.abandonDuckFocus()
+            idleCallback?.invoke()
+        }
     }
 }

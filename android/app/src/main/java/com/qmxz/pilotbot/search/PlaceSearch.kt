@@ -23,7 +23,7 @@ class PlaceSearch(private val context: Context) {
      */
     fun search(keyword: String, cityCode: String?, onResult: (Result<List<PlaceResult>>) -> Unit) {
         val query = try {
-            PoiSearch.Query(keyword, cityCode ?: "").apply { pageSize = 10 }
+            PoiSearch.Query(keyword, "", cityCode ?: "").apply { pageSize = 10 }
         } catch (e: Exception) {
             onResult(Result.failure(e)); return
         }
@@ -35,10 +35,16 @@ class PlaceSearch(private val context: Context) {
         execute(poiSearch, onResult)
     }
 
-    /** POIs around a center point ([radiusMeters] in metres), all categories. */
-    fun searchAround(lat: Double, lng: Double, radiusMeters: Int, onResult: (Result<List<PlaceResult>>) -> Unit) {
+    /** POIs around a center point ([radiusMeters] in metres), with optional [keyword]. */
+    fun searchAround(
+        lat: Double,
+        lng: Double,
+        radiusMeters: Int = 3000,
+        keyword: String = "",
+        onResult: (Result<List<PlaceResult>>) -> Unit,
+    ) {
         val query = try {
-            PoiSearch.Query("", "", "").apply { pageSize = 20 }
+            PoiSearch.Query(keyword, "", "").apply { pageSize = 20 }
         } catch (e: Exception) {
             onResult(Result.failure(e)); return
         }

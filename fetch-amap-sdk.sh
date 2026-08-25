@@ -7,7 +7,7 @@
 set -euo pipefail
 
 ZIP_URL="https://amappc.cn-hangzhou.oss-pub.aliyun-inc.com/lbs/static/zip/AMap_Android_Navi_SDK_All.zip"
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
 JAR_OUT="$ROOT/android/app/libs/amap-all.jar"
 JNI_ROOT="$ROOT/android/app/src/main/jniLibs"
 ABIS="arm64-v8a armeabi-v7a"

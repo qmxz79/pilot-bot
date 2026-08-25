@@ -22,6 +22,7 @@ class VoiceController(
     private val onListeningState: (Boolean) -> Unit = {},
     private val onUserText: (String) -> Unit = {},
     private val onListenError: (String) -> Unit = {},
+    private val onUtterance: ((String) -> Unit)? = null,
 ) {
     private var handsFreeEnabled = false
     private var listening = false
@@ -68,7 +69,11 @@ class VoiceController(
             val text = result.getOrNull()
             if (!text.isNullOrBlank()) {
                 onUserText(text)
-                copilot.chat(text)
+                if (onUtterance != null) {
+                    onUtterance.invoke(text)
+                } else {
+                    copilot.chat(text)
+                }
             } else {
                 result.exceptionOrNull()?.let { onListenError(it.message ?: "识别失败") }
             }
@@ -102,6 +107,10 @@ class VoiceController(
             return // not addressed to the copilot
         }
         onUserText(message)
-        copilot.chat(message)
+        if (onUtterance != null) {
+            onUtterance.invoke(message)
+        } else {
+            copilot.chat(message)
+        }
     }
 }

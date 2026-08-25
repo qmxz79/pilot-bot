@@ -8,12 +8,14 @@ import com.qmxz.pilotbot.llm.ChatMessage
 import com.qmxz.pilotbot.llm.GenerationConfig
 import com.qmxz.pilotbot.llm.LlmProvider
 import com.qmxz.pilotbot.llm.Role
+import com.qmxz.pilotbot.memory.MemoryStore
 import com.qmxz.pilotbot.navi.NaviState
 import com.qmxz.pilotbot.safety.DrivingLoadEstimator
 import com.qmxz.pilotbot.safety.DrivingLoadLevel
+import com.qmxz.pilotbot.safety.FatigueMonitor
 import com.qmxz.pilotbot.safety.SimpleDrivingLoadEstimator
 import com.qmxz.pilotbot.tts.TextToSpeech
-import com.qmxz.pilotbot.tts.splitSentences
+import com.qmxz.pilotbot.tts.extractCompleteSentences
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,8 +36,10 @@ class CopilotEngine(
     private val config: AppConfig,
     private val llm: LlmProvider,
     private val tts: TextToSpeech,
+    private val memoryStore: MemoryStore? = null,
     private val contextBuilder: ContextBuilder = SimpleContextBuilder(),
     private val loadEstimator: DrivingLoadEstimator = SimpleDrivingLoadEstimator(),
+    private val fatigueMonitor: FatigueMonitor = FatigueMonitor(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
     private val onCopilotText: (String) -> Unit = {},
     private val onCopilotDone: (String) -> Unit = {},
@@ -57,12 +61,43 @@ class CopilotEngine(
         // An idle fired by interrupt() while the old generation is being replaced must NOT close
         // the new window, hence the generationFinished gate.
         tts.setOnIdle { scope.launch { maybeEndSpeaking() } }
+
+        fatigueMonitor.onFatigueWarning = { minutes ->
+            narrate(
+                "车主已经连续驾驶了 $minutes 分钟。作为副驾好友，用关心但轻松自然的口吻提醒车主注意休息，建议进服务区喝口水或活动一下。",
+                bypassLoadGate = true,
+            )
+        }
+        fatigueMonitor.onNightCare = {
+            narrate(
+                "现在是深夜行车时段。作为副驾好友，主动关心一下车主，提醒夜间行车注意视线和安全，给车主提提神。",
+                bypassLoadGate = true,
+            )
+        }
+        fatigueMonitor.onCongestionBoredom = {
+            narrate(
+                "当前路段严重拥堵已经超过 10 分钟了。作为副驾好友，主动开口帮车主解解闷，聊聊天或安慰一下路况，缓解堵车的烦躁。",
+                bypassLoadGate = true,
+            )
+        }
+    }
+
+    /** Builds the complete system prompt including persona configuration and long-term memory. */
+    private fun buildSystemPrompt(): String {
+        val memoryPrompt = memoryStore?.buildMemoryPrompt().orEmpty()
+        return config.currentPersona().buildSystemPrompt(memoryPrompt)
     }
 
     /** Updates the latest navigation snapshot and re-estimates driving load. */
-    fun updateNaviState(state: NaviState) {
+    fun updateNaviState(state: NaviState, isNavigating: Boolean = true) {
         latestState = state
         latestLoad = loadEstimator.estimate(state)
+        fatigueMonitor.updateState(state, isNavigating)
+    }
+
+    /** Resets fatigue and session tracking when navigation ends. */
+    fun resetFatigueMonitor() {
+        fatigueMonitor.reset()
     }
 
     /** Feeds the current location description so chat can answer "where am I". */
@@ -80,25 +115,45 @@ class CopilotEngine(
         if (latestLoad == DrivingLoadLevel.L0_SILENT || latestLoad == DrivingLoadLevel.L1_RESTRAINED) return
 
         val messages = listOf(
-            ChatMessage(Role.SYSTEM, config.currentPersona().buildSystemPrompt()),
+            ChatMessage(Role.SYSTEM, buildSystemPrompt()),
             ChatMessage(Role.USER, contextBuilder.buildContextBlock(contextBuilder.buildEvent(naviText))),
         )
         generate(messages, onDone = {})
     }
 
     /**
-     * Proactive narration (e.g. crossing an administrative boundary). Same L0/L1 gate as
-     * [speakAbout]: the copilot does not initiate when the driving is demanding.
+     * Proactive narration (e.g. crossing an administrative boundary, fatigue care).
+     * When [bypassLoadGate] is false (default), the copilot stays quiet during demanding driving (L0/L1).
+     * For high-priority care alerts, [bypassLoadGate] allows delivering the care message.
      */
-    fun narrate(situation: String) {
-        if (latestLoad == DrivingLoadLevel.L0_SILENT || latestLoad == DrivingLoadLevel.L1_RESTRAINED) return
+    fun narrate(situation: String, bypassLoadGate: Boolean = false) {
+        if (!bypassLoadGate && (latestLoad == DrivingLoadLevel.L0_SILENT || latestLoad == DrivingLoadLevel.L1_RESTRAINED)) return
         if (situation.isBlank()) return
 
         val messages = listOf(
-            ChatMessage(Role.SYSTEM, config.currentPersona().buildSystemPrompt()),
+            ChatMessage(Role.SYSTEM, buildSystemPrompt()),
             ChatMessage(Role.USER, situation),
         )
         generate(messages, onDone = {})
+    }
+
+    /** Directly speaks a short message without LLM generation (e.g. system confirmations, memory acknowledgments). */
+    fun speakDirect(text: String) {
+        interrupt()
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return
+        postText(trimmed)
+        onCopilotDone(trimmed)
+        speaking = true
+        generationFinished = true
+        onSpeakingStart()
+        scope.launch {
+            if (tts.isAvailable) {
+                tts.speak(trimmed)
+            } else {
+                maybeEndSpeaking()
+            }
+        }
     }
 
     /** Sends a user utterance into the multi-turn conversation, cutting off any previous reply. */
@@ -108,7 +163,7 @@ class CopilotEngine(
         if (text.isEmpty()) return
 
         val messages = buildList {
-            add(ChatMessage(Role.SYSTEM, config.currentPersona().buildSystemPrompt()))
+            add(ChatMessage(Role.SYSTEM, buildSystemPrompt()))
             latestNaviText?.let { add(ChatMessage(Role.SYSTEM, "当前驾驶情境：$it")) }
             locationDesc?.let { add(ChatMessage(Role.SYSTEM, "你当前位置：$it")) }
             addAll(history.messages())
@@ -159,13 +214,14 @@ class CopilotEngine(
                         fullText.append(delta)
                         postText(fullText.toString())
                         val segment = fullText.substring(spokenUpTo)
-                        val sentences = splitSentences(segment)
-                        if (sentences.isNotEmpty()) {
-                            val spoken = sentences.joinToString("")
-                            spokenUpTo += spoken.length
+                        val extraction = extractCompleteSentences(segment)
+                        if (extraction.sentences.isNotEmpty()) {
+                            spokenUpTo += extraction.consumedLength
                             if (tts.isAvailable) {
                                 spokenAnything = true
-                                scope.launch { tts.speak(spoken) }
+                                for (sentence in extraction.sentences) {
+                                    scope.launch { tts.speak(sentence) }
+                                }
                             }
                         }
                     }

@@ -73,4 +73,5 @@ dependencies {
     implementation(files("libs/amap-all.jar"))
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
+    testImplementation(libs.junit)
 }

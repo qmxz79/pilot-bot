@@ -1,159 +1,351 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- 中部全屏地图区域：高德导航地图 -->
     <com.amap.api.navi.AMapNaviView
         android:id="@+id/naviView"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- 顶部操作区：搜索 + 定位/周边 -->
+    <!-- 顶部操作区：搜索栏 + 快捷直达按钮（家、公司、加油站、充电桩、定位、周边） -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
-        android:background="#E8FFFFFF"
+        android:background="@drawable/bg_top_bar"
+        android:elevation="6dp"
         android:orientation="vertical"
-        android:padding="8dp">
+        android:paddingHorizontal="12dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="12dp">
 
+        <!-- 搜索栏与功能入口 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:gravity="center_vertical"
             android:orientation="horizontal">
 
             <EditText
                 android:id="@+id/searchInput"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="44dp"
                 android:layout_weight="1"
+                android:background="@android:drawable/edit_text"
                 android:hint="@string/search_hint"
                 android:imeOptions="actionSearch"
                 android:inputType="text"
-                android:maxLines="1" />
+                android:maxLines="1"
+                android:paddingHorizontal="12dp"
+                android:textSize="14sp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/searchButton"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="@string/search_action" />
+                android:layout_height="44dp"
+                android:layout_marginStart="6dp"
+                android:text="@string/search_action"
+                app:cornerRadius="10dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/memoryButton"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:layout_marginStart="6dp"
+                android:text="@string/memory_btn"
+                app:cornerRadius="10dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/settingsButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="6dp"
+                android:insetLeft="0dp"
+                android:insetTop="0dp"
+                android:insetRight="0dp"
+                android:insetBottom="0dp"
+                android:padding="0dp"
+                android:text="⚙️"
+                android:textSize="16sp"
+                app:cornerRadius="10dp" />
         </LinearLayout>
 
-        <LinearLayout
+        <!-- 快捷一键直达按钮栏：家、公司、加油站、充电桩、定位、周边 -->
+        <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:orientation="horizontal">
+            android:layout_marginTop="8dp"
+            android:overScrollMode="never"
+            android:scrollbars="none">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/locateButton"
-                android:layout_width="0dp"
+            <LinearLayout
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/locate_btn" />
+                android:orientation="horizontal">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/aroundButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:text="@string/around_btn" />
-        </LinearLayout>
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/quickHomeButton"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:paddingHorizontal="12dp"
+                    android:text="@string/quick_home"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="19dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/quickCompanyButton"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:layout_marginStart="6dp"
+                    android:paddingHorizontal="12dp"
+                    android:text="@string/quick_company"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="19dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/quickGasButton"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:layout_marginStart="6dp"
+                    android:paddingHorizontal="12dp"
+                    android:text="@string/quick_gas"
+                    android:textSize="13sp"
+                    app:cornerRadius="19dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/quickChargeButton"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:layout_marginStart="6dp"
+                    android:paddingHorizontal="12dp"
+                    android:text="@string/quick_charge"
+                    android:textSize="13sp"
+                    app:cornerRadius="19dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/locateButton"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:layout_marginStart="6dp"
+                    android:paddingHorizontal="10dp"
+                    android:text="@string/locate_btn"
+                    android:textSize="12sp"
+                    app:cornerRadius="19dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/aroundButton"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:layout_marginStart="6dp"
+                    android:paddingHorizontal="10dp"
+                    android:text="@string/around_btn"
+                    android:textSize="12sp"
+                    app:cornerRadius="19dp" />
+            </LinearLayout>
+        </HorizontalScrollView>
     </LinearLayout>
 
-    <!-- 搜索结果列表（覆盖在地图上） -->
-    <LinearLayout
+    <!-- 搜索结果列表（浮动卡片） -->
+    <androidx.cardview.widget.CardView
         android:id="@+id/searchResults"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
-        android:layout_marginTop="120dp"
-        android:background="#F0FFFFFF"
-        android:orientation="vertical"
-        android:visibility="gone">
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginTop="116dp"
+        android:visibility="gone"
+        app:cardCornerRadius="14dp"
+        app:cardElevation="10dp">
 
-        <LinearLayout
-            android:id="@+id/searchResultList"
+        <ScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="8dp" />
-    </LinearLayout>
+            android:maxHeight="260dp">
 
-    <!-- 底部控制面板：常显条 + 可折叠容器 -->
+            <LinearLayout
+                android:id="@+id/searchResultList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="8dp" />
+        </ScrollView>
+    </androidx.cardview.widget.CardView>
+
+    <!-- 底部大卡片视图 (Driver Mode UI) -->
     <LinearLayout
+        android:id="@+id/bottomDriverCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:background="#E8FFFFFF"
-        android:orientation="vertical">
+        android:background="@drawable/bg_driver_card"
+        android:elevation="12dp"
+        android:orientation="vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="12dp">
 
+        <!-- 导航与状态看板（大字号、驾驶友好） -->
         <LinearLayout
-            android:id="@+id/panelHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="4dp">
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <LinearLayout
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:layout_weight="1"
+                android:orientation="vertical">
 
                 <TextView
                     android:id="@+id/statusText"
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:gravity="center"
-                    android:maxLines="1"
-                    android:text="@string/status_ready"
-                    android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
+                    android:ellipsize="end"
+                    android:maxLines="2"
+                    android:text="@string/nav_standby_distance_time"
+                    android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                    android:textColor="#0F172A"
+                    android:textStyle="bold" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/expandButton"
-                    android:layout_width="wrap_content"
+                <TextView
+                    android:id="@+id/roadNameText"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:minWidth="0dp"
-                    android:text="@string/expand_panel" />
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="@string/nav_standby_road"
+                    android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                    android:textColor="#64748B" />
             </LinearLayout>
 
             <TextView
                 android:id="@+id/voiceStatus"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:gravity="center"
-                android:maxLines="1"
-                android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
+                android:layout_marginStart="8dp"
+                android:background="#E2E8F0"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
+                android:textColor="#475569" />
         </LinearLayout>
 
+        <!-- 副驾老朋友说话气泡（大字号、醒目亲切） -->
         <LinearLayout
-            android:id="@+id/panelBody"
+            android:id="@+id/copilotBubble"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_speech_bubble"
             android:orientation="vertical"
-            android:padding="16dp"
-            android:visibility="gone">
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="10dp">
+
+            <TextView
+                android:id="@+id/copilotBubbleTag"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🤖 副驾老朋友说："
+                android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+                android:textColor="#2563EB"
+                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/copilotText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center"
-                android:maxLines="2"
+                android:layout_marginTop="4dp"
+                android:lineSpacingMultiplier="1.2"
+                android:maxLines="3"
                 android:text="@string/copilot_default"
-                android:textAppearance="@style/TextAppearance.Material3.BodySmall"
-                android:textIsSelectable="true" />
+                android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
+                android:textColor="#0F172A"
+                android:textIsSelectable="true"
+                android:textSize="16sp" />
+        </LinearLayout>
+
+        <!-- 驾驶大按钮：一键说话大按钮 + 导航启停按钮 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/micButton"
+                android:layout_width="0dp"
+                android:layout_height="56dp"
+                android:layout_weight="1.2"
+                android:text="@string/mic_button"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                app:cornerRadius="28dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/startNavigationButton"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="56dp"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:text="@string/start_test_navigation"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                app:cornerRadius="28dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/stopNavigationButton"
+                android:layout_width="0dp"
+                android:layout_height="56dp"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:backgroundTint="#EF4444"
+                android:text="@string/stop_navigation"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:visibility="gone"
+                app:cornerRadius="28dp" />
+        </LinearLayout>
+
+        <!-- 调试与对话详情折叠切换 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/expandButton"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/expand_panel"
+            android:textSize="12sp" />
+
+        <!-- 可折叠调试与历史面板 -->
+        <LinearLayout
+            android:id="@+id/panelBody"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
 
             <ScrollView
                 android:id="@+id/transcriptScroll"
                 android:layout_width="match_parent"
                 android:layout_height="100dp"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="4dp"
                 android:background="@android:drawable/edit_text">
 
                 <TextView
@@ -178,59 +370,42 @@
                     android:layout_weight="1"
                     android:hint="@string/chat_input_hint"
                     android:inputType="text"
-                    android:maxLines="2" />
+                    android:maxLines="2"
+                    android:textSize="14sp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/sendButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
+                    android:layout_marginStart="8dp"
                     android:text="@string/send_button" />
             </LinearLayout>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/simulateButton"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/simulate_broadcast" />
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/simulateNarrationButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/simulate_narration" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/simulateButton"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/simulate_broadcast"
+                    android:textSize="12sp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/micButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/mic_button" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/startNavigationButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/start_test_navigation" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/stopNavigationButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:enabled="false"
-                android:text="@string/stop_navigation" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/settingsButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/open_settings" />
-
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/simulateNarrationButton"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:text="@string/simulate_narration"
+                    android:textSize="12sp" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 

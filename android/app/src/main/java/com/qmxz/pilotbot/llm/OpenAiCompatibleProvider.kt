@@ -44,14 +44,15 @@ class OpenAiCompatibleProvider(
             }
 
             override fun onResponse(call: Call, response: Response) {
-                try {
-                    val body = response.body ?: throw IOException("空响应体")
-                    if (!response.isSuccessful) {
-                        throw IOException("HTTP ${response.code}: ${body.string().take(200)}")
-                    }
-                    val full = StringBuilder()
-                    var finishReason: String? = null
-                    body.source().use { source ->
+                response.use { resp ->
+                    try {
+                        val body = resp.body ?: throw IOException("空响应体")
+                        if (!resp.isSuccessful) {
+                            throw IOException("HTTP ${resp.code}: ${body.string().take(200)}")
+                        }
+                        val full = StringBuilder()
+                        var finishReason: String? = null
+                        val source = body.source()
                         while (true) {
                             val line = source.readUtf8Line() ?: break
                             val delta = parseSseDelta(line) ?: continue
@@ -61,10 +62,10 @@ class OpenAiCompatibleProvider(
                             }
                             delta.finishReason?.let { finishReason = it }
                         }
+                        cont.resume(ChatResult(full.toString(), finishReason))
+                    } catch (e: Exception) {
+                        if (!cont.isCancelled) cont.resumeWithException(e)
                     }
-                    cont.resume(ChatResult(full.toString(), finishReason))
-                } catch (e: Exception) {
-                    if (!cont.isCancelled) cont.resumeWithException(e)
                 }
             }
         })

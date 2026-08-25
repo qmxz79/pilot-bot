@@ -2,8 +2,8 @@
 <resources>
     <string name="app_name">副驾伴侣</string>
     <string name="status_ready">副驾伴侣已准备就绪</string>
-    <string name="start_test_navigation">开始测试导航</string>
-    <string name="stop_navigation">停止导航</string>
+    <string name="start_test_navigation">🚀 开始导航</string>
+    <string name="stop_navigation">🛑 停止导航</string>
     <string name="status_calculating_route">正在计算前往天安门的路线…</string>
     <string name="status_navigation_stopped">导航已停止</string>
     <string name="location_permission_required">需要精确定位权限才能开始 GPS 导航</string>
@@ -17,27 +17,50 @@
     <string name="open_settings">设置</string>
     <string name="simulate_broadcast">模拟播报</string>
     <string name="simulate_narration">模拟跨区叙事</string>
-    <string name="copilot_default">副驾还没说话…</string>
+    <string name="copilot_default">你好呀！我是你的副驾老朋友，今天想去哪？直接点麦克风跟我说就行~</string>
     <string name="simulated_broadcast_text">前方 3 公里拥堵，预计通行 6 分钟</string>
     <string name="simulated_narration_text">你正进入北京市朝阳区，跟司机讲讲这里有什么值得提的。</string>
     <string name="narration_area_format">你正进入 %1$s%2$s，跟司机讲讲这里有什么值得提的。</string>
-    <string name="search_hint">搜索目的地…</string>
+    <string name="search_hint">🔍 搜索目的地或语音导航…</string>
     <string name="search_action">搜索</string>
-    <string name="locate_btn">定位</string>
-    <string name="around_btn">周边</string>
-    <string name="expand_panel">▲</string>
-    <string name="collapse_panel">▼</string>
+    <string name="locate_btn">📍 定位</string>
+    <string name="around_btn">🧭 周边</string>
+    <string name="quick_home">🏠 家</string>
+    <string name="quick_company">🏢 公司</string>
+    <string name="quick_gas">⛽ 加油站</string>
+    <string name="quick_charge">⚡ 充电桩</string>
+    <string name="memory_btn">🧠 记忆</string>
+
+    <string name="expand_panel">▲ 展开调试与对话记录</string>
+    <string name="collapse_panel">▼ 收起调试与对话记录</string>
     <string name="search_waiting_location">等待定位，稍后再试</string>
     <string name="searching">搜索中…</string>
     <string name="search_no_result">没有找到相关地点</string>
 
-    <string name="mic_button">说话</string>
-    <string name="mic_button_listening">停止听</string>
+    <string name="mic_button">🎙️ 按键说话</string>
+    <string name="mic_button_listening">🔴 正在倾听 (点击停止)</string>
     <string name="chat_input_hint">打字跟副驾说…</string>
     <string name="send_button">发送</string>
     <string name="mic_permission_required">需要录音权限才能说话</string>
     <string name="transcript_user">你</string>
     <string name="transcript_copilot">副驾</string>
+
+    <string name="nav_standby_distance_time">准备就绪 · 随时出发</string>
+    <string name="nav_standby_road">当前道路：等待规划</string>
+    <string name="home_not_set">你还没告诉我你家在哪呢，可以在「记忆管理」里设置家地址哦。</string>
+    <string name="company_not_set">你还没设置公司地址呢，可以在「记忆管理」里设置公司地址哦。</string>
+    <string name="memory_dialog_title">副驾老朋友的记忆管理</string>
+    <string name="memory_user_name_label">车主称呼（副驾对你的叫法）</string>
+    <string name="memory_user_name_hint">例如：老张、李哥、小王</string>
+    <string name="memory_home_label">家地址</string>
+    <string name="memory_home_hint">例如：朝阳区望京SOHO</string>
+    <string name="memory_company_label">公司地址</string>
+    <string name="memory_company_hint">例如：海淀区中关村软件园</string>
+    <string name="memory_preferences_label">驾驶偏好（如：喜欢走环线、不走高速）</string>
+    <string name="memory_facts_label">副驾点滴备忘（如：车牌京A88888、不吃香菜）</string>
+    <string name="memory_add_btn">添加</string>
+    <string name="memory_save_btn">保存副驾记忆</string>
+    <string name="memory_saved_toast">副驾记忆已成功更新！</string>
 
     <string name="settings_title">副驾设置</string>
     <string name="tts_warning_title">未检测到语音引擎</string>

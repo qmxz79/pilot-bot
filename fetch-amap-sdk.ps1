@@ -6,7 +6,7 @@
 $ErrorActionPreference = "Stop"
 
 $ZipUrl = "https://amappc.cn-hangzhou.oss-pub.aliyun-inc.com/lbs/static/zip/AMap_Android_Navi_SDK_All.zip"
-$RepoRoot = Split-Path $PSScriptRoot -Parent
+$RepoRoot = $PSScriptRoot
 $JarOut   = Join-Path $RepoRoot "android\app\libs\amap-all.jar"
 $JniRoot  = Join-Path $RepoRoot "android\app\src\main\jniLibs"
 $Abis     = @("arm64-v8a", "armeabi-v7a")

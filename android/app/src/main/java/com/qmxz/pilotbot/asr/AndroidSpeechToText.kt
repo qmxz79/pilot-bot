@@ -6,39 +6,48 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.os.Handler
+import android.os.Looper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /** System [SpeechRecognizer] wrapper (no dependency); recognizer errors are surfaced as exceptions. */
 class AndroidSpeechToText(context: Context) : SpeechToText {
     private val appContext = context.applicationContext
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var continuousRecognizer: SpeechRecognizer? = null
 
-    override suspend fun listenOnce(): String = suspendCancellableCoroutine { cont ->
-        val recognizer = SpeechRecognizer.createSpeechRecognizer(appContext)
-        recognizer.setRecognitionListener(object : RecognitionListener {
-            override fun onResults(results: Bundle) {
-                val text = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
-                recognizer.destroy()
-                if (!cont.isCancelled) cont.resume(text)
-            }
+    override suspend fun listenOnce(): String = withContext(Dispatchers.Main) {
+        suspendCancellableCoroutine { cont ->
+            val recognizer = SpeechRecognizer.createSpeechRecognizer(appContext)
+            recognizer.setRecognitionListener(object : RecognitionListener {
+                override fun onResults(results: Bundle) {
+                    val text = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+                    recognizer.destroy()
+                    if (!cont.isCancelled) cont.resume(text)
+                }
 
-            override fun onError(error: Int) {
-                recognizer.destroy()
-                if (!cont.isCancelled) cont.resumeWithException(RecognitionException(error))
-            }
+                override fun onError(error: Int) {
+                    recognizer.destroy()
+                    if (!cont.isCancelled) cont.resumeWithException(RecognitionException(error))
+                }
 
-            override fun onBeginningOfSpeech() {}
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
-            override fun onEvent(eventType: Int, params: Bundle?) {}
-            override fun onPartialResults(partialResults: Bundle?) {}
-            override fun onReadyForSpeech(params: Bundle?) {}
-            override fun onRmsChanged(rmsdB: Float) {}
-        })
-        cont.invokeOnCancellation { recognizer.destroy() }
-        recognizer.startListening(intent())
+                override fun onBeginningOfSpeech() {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {}
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+                override fun onPartialResults(partialResults: Bundle?) {}
+                override fun onReadyForSpeech(params: Bundle?) {}
+                override fun onRmsChanged(rmsdB: Float) {}
+            })
+            cont.invokeOnCancellation {
+                mainHandler.post { recognizer.destroy() }
+            }
+            recognizer.startListening(intent())
+        }
     }
 
     override fun startContinuous(onResult: (String) -> Unit, onSpeechStart: () -> Unit) {
@@ -96,11 +105,19 @@ class AndroidSpeechToText(context: Context) : SpeechToText {
     }
 
     private fun stopInternal() {
-        continuousRecognizer?.let {
-            it.cancel()
-            it.destroy()
-        }
+        val rec = continuousRecognizer
         continuousRecognizer = null
+        if (rec != null) {
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                rec.cancel()
+                rec.destroy()
+            } else {
+                mainHandler.post {
+                    rec.cancel()
+                    rec.destroy()
+                }
+            }
+        }
     }
 
     private fun intent(): Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
