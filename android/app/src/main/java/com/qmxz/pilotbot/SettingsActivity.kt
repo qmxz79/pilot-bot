@@ -77,6 +77,43 @@ class SettingsActivity : AppCompatActivity() {
             model.setText(it.model)
         }
 
+        // Quick model preset button click handlers
+        findViewById<MaterialButton>(R.id.presetDeepSeekBtn).setOnClickListener {
+            baseUrl.setText("https://api.deepseek.com/v1")
+            model.setText("deepseek-chat")
+            Toast.makeText(this, "已填入 DeepSeek 配置，请填入 API Key", Toast.LENGTH_SHORT).show()
+        }
+        findViewById<MaterialButton>(R.id.presetSiliconFlowBtn).setOnClickListener {
+            baseUrl.setText("https://api.siliconflow.cn/v1")
+            model.setText("deepseek-ai/DeepSeek-V3")
+            Toast.makeText(this, "已填入 硅基流动 配置，请填入 API Key", Toast.LENGTH_SHORT).show()
+        }
+        findViewById<MaterialButton>(R.id.presetQwenBtn).setOnClickListener {
+            baseUrl.setText("https://dashscope.aliyuncs.com/compatible-mode/v1")
+            model.setText("qwen-plus")
+            Toast.makeText(this, "已填入 通义千问 配置，请填入 API Key", Toast.LENGTH_SHORT).show()
+        }
+        findViewById<MaterialButton>(R.id.presetZhipuBtn).setOnClickListener {
+            baseUrl.setText("https://open.bigmodel.cn/api/paas/v4")
+            model.setText("glm-4-flash")
+            Toast.makeText(this, "已填入 智谱GLM 配置，请填入 API Key", Toast.LENGTH_SHORT).show()
+        }
+        findViewById<MaterialButton>(R.id.presetKimiBtn).setOnClickListener {
+            baseUrl.setText("https://api.moonshot.cn/v1")
+            model.setText("moonshot-v1-8k")
+            Toast.makeText(this, "已填入 Kimi 配置，请填入 API Key", Toast.LENGTH_SHORT).show()
+        }
+        findViewById<MaterialButton>(R.id.presetOpenAiBtn).setOnClickListener {
+            baseUrl.setText("https://api.openai.com/v1")
+            model.setText("gpt-4o-mini")
+            Toast.makeText(this, "已填入 OpenAI 配置，请填入 API Key", Toast.LENGTH_SHORT).show()
+        }
+        findViewById<MaterialButton>(R.id.presetOllamaBtn).setOnClickListener {
+            baseUrl.setText("http://192.168.1.100:11434/v1")
+            model.setText("qwen2.5:7b")
+            Toast.makeText(this, "已填入 Ollama 配置，请修改 IP 为局域网地址", Toast.LENGTH_SHORT).show()
+        }
+
         personaSpinner.adapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_dropdown_item,

@@ -9,6 +9,8 @@ import android.os.Looper
 import android.speech.SpeechRecognizer
 import android.view.LayoutInflater
 import android.view.View
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -182,12 +184,33 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.locateButton).setOnClickListener { onLocateClick() }
         findViewById<MaterialButton>(R.id.aroundButton).setOnClickListener { onAroundClick() }
 
+        // Quick dialogue test chips
+        findViewById<MaterialButton>(R.id.quickChipHello).setOnClickListener { handleUserUtterance("你好！") }
+        findViewById<MaterialButton>(R.id.quickChipWho).setOnClickListener { handleUserUtterance("你是谁？") }
+        findViewById<MaterialButton>(R.id.quickChipJoke).setOnClickListener { handleUserUtterance("讲个笑话解解闷") }
+        findViewById<MaterialButton>(R.id.quickChipEta).setOnClickListener { handleUserUtterance("还有多久能到目的地？") }
+        findViewById<MaterialButton>(R.id.quickChipRemember).setOnClickListener { handleUserUtterance("记住我爱喝美式咖啡") }
+
         // Driver card action buttons
         micButton.setOnClickListener { onMicPressed() }
         startButton.setOnClickListener { requestLocationThenStartNavigation() }
         stopButton.setOnClickListener { stopCurrentNavigation() }
         expandButton.setOnClickListener { togglePanel() }
         findViewById<MaterialButton>(R.id.sendButton).setOnClickListener { sendChatText() }
+        chatInput.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEND || actionId == EditorInfo.IME_ACTION_DONE) {
+                sendChatText()
+                true
+            } else {
+                false
+            }
+        }
+        findViewById<View>(R.id.copilotBubble).setOnClickListener {
+            val endpoint = appConfig.endpoint
+            if (endpoint.baseUrl.isBlank() || endpoint.apiKey.isBlank() || endpoint.model.isBlank()) {
+                openSettings()
+            }
+        }
         findViewById<MaterialButton>(R.id.simulateButton).setOnClickListener {
             copilot.speakAbout(getString(R.string.simulated_broadcast_text))
         }
@@ -224,7 +247,12 @@ class MainActivity : AppCompatActivity() {
                 }
             },
             onUserText = { text -> appendTranscript(getString(R.string.transcript_user), text) },
-            onListenError = { msg -> renderOnMain { roadNameText.text = "听不清：$msg" } },
+            onListenError = { msg ->
+                renderOnMain {
+                    roadNameText.text = "听不清：$msg"
+                    Toast.makeText(this, "语音识别未返回结果（$msg），建议使用键盘打字或输入法语音输入", Toast.LENGTH_SHORT).show()
+                }
+            },
             onUtterance = { utterance -> renderOnMain { handleUserUtterance(utterance) } },
         )
 
@@ -647,6 +675,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onMicPressed() {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            Toast.makeText(
+                this,
+                "提示：此手机无内置语音识别服务，可直接在下方打字，或使用输入法自带的语音麦克风说话！",
+                Toast.LENGTH_LONG,
+            ).show()
+            chatInput.requestFocus()
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager
+            imm?.showSoftInput(chatInput, InputMethodManager.SHOW_IMPLICIT)
+            return
+        }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         ) {

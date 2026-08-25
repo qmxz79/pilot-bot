@@ -190,7 +190,7 @@ class CopilotEngine(
     private fun generate(messages: List<ChatMessage>, onDone: (String) -> Unit) {
         val endpoint = config.endpoint
         if (endpoint.baseUrl.isBlank() || endpoint.apiKey.isBlank() || endpoint.model.isBlank()) {
-            postText("还没配置模型，去「设置」填一下 base_url / api_key / model")
+            postText("⚠️ 还没配置大模型，请点击此气泡或前往「设置」填入 API Key！")
             return
         }
 
@@ -240,8 +240,15 @@ class CopilotEngine(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Surface LLM/network failures instead of failing silently.
-                postText("副驾走神了：${e.message}")
+                // Surface LLM/network failures with actionable diagnosis.
+                val errorMsg = when {
+                    e.message?.contains("401") == true -> "❌ 认证失败(401)：请在「设置」中核对 API Key 是否正确"
+                    e.message?.contains("404") == true -> "❌ 接口不存在(404)：请在「设置」中检查 base_url 和模型名"
+                    e.message?.contains("429") == true -> "❌ 额度受限(429)：账户余额不足或请求频率过高"
+                    e.message?.contains("Unable to resolve host", ignoreCase = true) == true -> "❌ 网络异常：无法连接到服务器，请检查手机网络"
+                    else -> "❌ 连接失败：${e.message ?: e.javaClass.simpleName}"
+                }
+                postText(errorMsg)
                 generationFinished = true
                 if (!spokenAnything) maybeEndSpeaking()
             }

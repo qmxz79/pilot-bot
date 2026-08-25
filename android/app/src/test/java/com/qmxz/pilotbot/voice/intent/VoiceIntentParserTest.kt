@@ -19,7 +19,7 @@ class VoiceIntentParserTest {
             "带我去天府广场怎么走？" to "天府广场",
         )
 
-        for ((utterance, expectedDest) to cases) {
+        for ((utterance, expectedDest) in cases) {
             val intent = VoiceIntentParser.parse(utterance)
             assertTrue("Expected NavigateTo for '$utterance', got $intent", intent is VoiceIntent.NavigateTo)
             assertEquals(expectedDest, (intent as VoiceIntent.NavigateTo).destination)
@@ -40,7 +40,7 @@ class VoiceIntentParserTest {
             "查一下附近的洗车店！" to "洗车店",
         )
 
-        for ((utterance, expectedKeyword) to cases) {
+        for ((utterance, expectedKeyword) in cases) {
             val intent = VoiceIntentParser.parse(utterance)
             assertTrue("Expected SearchNearby for '$utterance', got $intent", intent is VoiceIntent.SearchNearby)
             assertEquals(expectedKeyword, (intent as VoiceIntent.SearchNearby).keyword)
@@ -97,7 +97,7 @@ class VoiceIntentParserTest {
             "牢记我不吃香菜" to "我不吃香菜",
         )
 
-        for ((utterance, expectedFact) to cases) {
+        for ((utterance, expectedFact) in cases) {
             val intent = VoiceIntentParser.parse(utterance)
             assertTrue("Expected RememberFact for '$utterance', got $intent", intent is VoiceIntent.RememberFact)
             assertEquals(expectedFact, (intent as VoiceIntent.RememberFact).fact)

@@ -77,7 +77,7 @@ class OpenAiCompatibleProvider(
         config: GenerationConfig,
     ): Request {
         val payload = JSONObject().apply {
-            put("model", endpoint.model)
+            put("model", endpoint.model.trim())
             put("stream", true)
             put("temperature", config.temperature)
             put("max_tokens", config.maxTokens)
@@ -88,9 +88,12 @@ class OpenAiCompatibleProvider(
             })
             if (config.stopSequences.isNotEmpty()) put("stop", JSONArray(config.stopSequences))
         }
+        val fullUrl = normalizeChatCompletionsUrl(endpoint.baseUrl)
+        val key = endpoint.apiKey.trim()
+        val authHeader = if (key.startsWith("Bearer ", ignoreCase = true)) key else "Bearer $key"
         return Request.Builder()
-            .url(endpoint.baseUrl.trimEnd('/') + "/chat/completions")
-            .addHeader("Authorization", "Bearer ${endpoint.apiKey}")
+            .url(fullUrl)
+            .addHeader("Authorization", authHeader)
             .post(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
             .build()
     }
@@ -133,3 +136,31 @@ fun parseSseDelta(line: String): SseDelta? {
         finishReason = first.optString("finish_reason").takeIf { it.isNotEmpty() },
     )
 }
+
+/**
+ * Normalizes user-input baseUrl into a complete chat completions endpoint URL.
+ * Automatically adds https scheme, handles /v1, /v4, /compatible-mode, and prevents duplicate paths.
+ */
+fun normalizeChatCompletionsUrl(rawUrl: String): String {
+    var url = rawUrl.trim()
+    if (url.isEmpty()) return ""
+    if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
+        url = "https://$url"
+    }
+    url = url.trimEnd('/')
+    if (url.endsWith("/chat/completions", ignoreCase = true)) {
+        return url
+    }
+    if (url.endsWith("/v1", ignoreCase = true) ||
+        url.endsWith("/v4", ignoreCase = true) ||
+        url.endsWith("/compatible-mode", ignoreCase = true)
+    ) {
+        return "$url/chat/completions"
+    }
+    val uri = try { java.net.URI(url) } catch (_: Exception) { null }
+    if (uri != null && (uri.path.isNullOrEmpty() || uri.path == "/")) {
+        return "$url/v1/chat/completions"
+    }
+    return "$url/chat/completions"
+}
+
