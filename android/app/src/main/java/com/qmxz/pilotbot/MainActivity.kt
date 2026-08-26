@@ -28,7 +28,11 @@ import com.amap.api.maps.model.BitmapDescriptorFactory
 import com.amap.api.maps.model.LatLng
 import com.amap.api.maps.model.Marker
 import com.amap.api.maps.model.MarkerOptions
+import com.amap.api.maps.model.Polyline
+import com.amap.api.maps.model.PolylineOptions
 import com.amap.api.navi.AMapNaviView
+import com.qmxz.pilotbot.map.GoogleMapEngine
+import com.qmxz.pilotbot.map.GeoPoint as GlobalGeoPoint
 import android.content.res.ColorStateList
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -97,8 +101,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var smartStt: SmartSpeechToText
     private lateinit var enRoute: AmapEnRouteDataSource
     private lateinit var placeSearch: PlaceSearch
+    private lateinit var googleMapEngine: GoogleMapEngine
 
     private var aMap: AMap? = null
+    private var googleRoutePolyline: Polyline? = null
     private var locationMarker: Marker? = null
     private val aroundMarkers = mutableListOf<Marker>()
     private val transcript = StringBuilder()
@@ -289,6 +295,10 @@ class MainActivity : AppCompatActivity() {
         )
 
         placeSearch = PlaceSearch(applicationContext)
+        googleMapEngine = GoogleMapEngine(
+            context = applicationContext,
+            apiKeyProvider = { appConfig.googleMapsApiKey },
+        )
         enRoute = AmapEnRouteDataSource(applicationContext)
         enRoute.start(
             onAreaChanged = {},
@@ -317,18 +327,40 @@ class MainActivity : AppCompatActivity() {
         mountMapEngine()
     }
 
-    private fun mountMapEngine() {
-        when (appConfig.mapProvider) {
-            MapProvider.GOOGLE, MapProvider.GOOGLE_MAPS -> {
-                statusText.text = "🌍 Google Maps 全球地图引擎已挂载"
-                roadNameText.text = if (appConfig.googleMapsApiKey.isNotBlank()) "Google Maps API 已配置 · 全球路网覆盖" else "Google Maps 模式 · 待填入 API Key"
-                copilot.updateLocation("Google Maps 全球定位模式")
+    private fun isGoogleMapsActive(): Boolean =
+        appConfig.mapProvider == MapProvider.GOOGLE || appConfig.mapProvider == MapProvider.GOOGLE_MAPS
+
+    private fun performSearch(keyword: String, callback: (Result<List<PlaceResult>>) -> Unit) {
+        if (isGoogleMapsActive()) {
+            googleMapEngine.searchPlaces(keyword, null, callback)
+        } else {
+            placeSearch.search(keyword, enRoute.latestLocation()?.cityCode, callback)
+        }
+    }
+
+    private fun performSearchNearby(keyword: String, callback: (Result<List<PlaceResult>>) -> Unit) {
+        val loc = enRoute.latestLocation()
+        if (isGoogleMapsActive()) {
+            googleMapEngine.searchPlaces(keyword, null, callback)
+        } else {
+            if (loc != null) {
+                placeSearch.searchAround(loc.latitude, loc.longitude, 3000, keyword, callback)
+            } else {
+                placeSearch.search(keyword, null, callback)
             }
-            MapProvider.AMAP -> {
-                if (statusText.text.contains("Google Maps")) {
-                    statusText.setText(R.string.nav_standby_distance_time)
-                    roadNameText.setText(R.string.nav_standby_road)
-                }
+        }
+    }
+
+    private fun mountMapEngine() {
+        if (isGoogleMapsActive()) {
+            val keyStatus = if (appConfig.googleMapsApiKey.isNotBlank()) "Google Maps API 就绪 · 全球覆盖" else "Google Maps 模式 · 请在设置填入 Key"
+            statusText.text = "🌍 Google Maps 全球模式"
+            roadNameText.text = keyStatus
+            copilot.updateLocation("Google Maps 全球定位模式")
+        } else {
+            if (statusText.text.contains("Google Maps")) {
+                statusText.setText(R.string.nav_standby_distance_time)
+                roadNameText.setText(R.string.nav_standby_road)
             }
         }
     }
@@ -401,8 +433,7 @@ class MainActivity : AppCompatActivity() {
             is VoiceIntent.NavigateTo -> {
                 val dest = intent.destination
                 copilot.speakDirect("正在为你搜索前往 $dest 的路线…")
-                val cityCode = enRoute.latestLocation()?.cityCode
-                placeSearch.search(dest, cityCode) { result ->
+                performSearch(dest) { result ->
                     result.onSuccess { list ->
                         renderOnMain {
                             if (list.isNotEmpty()) {
@@ -425,8 +456,7 @@ class MainActivity : AppCompatActivity() {
                 val home = memoryStore.getMemory().homeAddress
                 if (home.isNotBlank()) {
                     copilot.speakDirect("好嘞，准备带你回家！正在规划前往 $home 的路线。")
-                    val cityCode = enRoute.latestLocation()?.cityCode
-                    placeSearch.search(home, cityCode) { result ->
+                    performSearch(home) { result ->
                         result.onSuccess { list ->
                             renderOnMain {
                                 if (list.isNotEmpty()) {
@@ -451,8 +481,7 @@ class MainActivity : AppCompatActivity() {
                 val company = memoryStore.getMemory().companyAddress
                 if (company.isNotBlank()) {
                     copilot.speakDirect("收到，准备去公司！正在规划前往 $company 的路线。")
-                    val cityCode = enRoute.latestLocation()?.cityCode
-                    placeSearch.search(company, cityCode) { result ->
+                    performSearch(company) { result ->
                         result.onSuccess { list ->
                             renderOnMain {
                                 if (list.isNotEmpty()) {
@@ -475,13 +504,8 @@ class MainActivity : AppCompatActivity() {
 
             is VoiceIntent.SearchNearby -> {
                 val kw = intent.keyword
-                val loc = enRoute.latestLocation()
-                if (loc == null) {
-                    copilot.speakDirect(getString(R.string.search_waiting_location))
-                    return
-                }
                 copilot.speakDirect("正在搜索附近的 $kw…")
-                placeSearch.searchAround(loc.latitude, loc.longitude, 3000, kw) { result ->
+                performSearchNearby(kw) { result ->
                     result.onSuccess { list ->
                         renderOnMain {
                             showAroundMarkers(list)
@@ -489,7 +513,7 @@ class MainActivity : AppCompatActivity() {
                                 val first = list.first()
                                 copilot.speakDirect("附近找到 ${list.size} 个 $kw，最近的是 ${first.title}。")
                             } else {
-                                copilot.speakDirect("附近 3 公里内没有找到 $kw。")
+                                copilot.speakDirect("附近没有找到 $kw。")
                             }
                         }
                     }.onFailure { e ->
@@ -751,9 +775,9 @@ class MainActivity : AppCompatActivity() {
     private fun doSearch() {
         val keyword = searchInput.text?.toString()?.trim().orEmpty()
         if (keyword.isEmpty()) return
-        statusText.text = getString(R.string.searching)
+        statusText.text = if (isGoogleMapsActive()) "Google 全球搜索中…" else getString(R.string.searching)
         searchResults.visibility = View.GONE
-        placeSearch.search(keyword, enRoute.latestLocation()?.cityCode) { result ->
+        performSearch(keyword) { result ->
             result.onSuccess { list ->
                 renderOnMain { showSearchResults(list) }
             }.onFailure { e ->
@@ -789,6 +813,39 @@ class MainActivity : AppCompatActivity() {
 
     private fun startNaviTo(place: PlaceResult) {
         val start = enRoute.latestLocation()
+        val startLat = start?.latitude ?: 3.1390
+        val startLng = start?.longitude ?: 101.6869
+
+        if (isGoogleMapsActive()) {
+            statusText.text = "Google Maps 正在规划路线…"
+            googleMapEngine.calculateRoute(
+                start = GlobalGeoPoint(lat = startLat, lng = startLng),
+                dest = GlobalGeoPoint(lat = place.lat, lng = place.lng),
+            ) { result ->
+                result.onSuccess { route ->
+                    renderOnMain {
+                        val distKm = String.format("%.1f", route.totalDistanceMeters / 1000.0)
+                        val mins = (route.totalDurationSeconds / 60).coerceAtLeast(1)
+                        statusText.text = "Google 导航 · 剩余 $distKm 公里 · 约 $mins 分钟"
+                        roadNameText.text = "目的地：${place.title} (${route.routeName})"
+                        startButton.visibility = View.GONE
+                        stopButton.visibility = View.VISIBLE
+                        stopButton.isEnabled = true
+                        copilot.speakDirect("已为您通过 Google Maps 规划好前往 ${place.title} 的路线，全程约 $distKm 公里，预计耗时 $mins 分钟。出发！")
+                        googleMapEngine.startNavigation()
+                        drawGoogleRouteOnMap(route, place)
+                    }
+                }.onFailure { e ->
+                    renderOnMain {
+                        statusText.text = "Google 算路失败：${e.message}"
+                        roadNameText.text = "请检查 Google Maps API Key"
+                        copilot.speakDirect("Google 路线规划失败：${e.message}")
+                    }
+                }
+            }
+            return
+        }
+
         if (start == null) {
             statusText.text = getString(R.string.search_waiting_location)
             return
@@ -797,6 +854,35 @@ class MainActivity : AppCompatActivity() {
             start = GeoPoint(start.longitude, start.latitude),
             destination = GeoPoint(place.lng, place.lat),
         )
+    }
+
+    private fun drawGoogleRouteOnMap(route: com.qmxz.pilotbot.map.RouteSummary, place: PlaceResult) {
+        val map = aMap ?: return
+        googleRoutePolyline?.remove()
+        aroundMarkers.forEach { it.remove() }
+        aroundMarkers.clear()
+
+        val points = route.polylinePoints.map { LatLng(it.lat, it.lng) }
+        if (points.isNotEmpty()) {
+            googleRoutePolyline = map.addPolyline(
+                PolylineOptions()
+                    .addAll(points)
+                    .color(android.graphics.Color.parseColor("#2563EB"))
+                    .width(14f)
+            )
+            map.animateCamera(CameraUpdateFactory.newLatLngZoom(points.first(), 14f))
+        } else {
+            map.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(place.lat, place.lng), 14f))
+        }
+
+        val destMarker = map.addMarker(
+            MarkerOptions()
+                .position(LatLng(place.lat, place.lng))
+                .title(place.title)
+                .snippet(place.snippet)
+                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
+        )
+        destMarker?.showInfoWindow()
     }
 
     private fun onMicPressed() {
@@ -857,6 +943,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startTestNavigation() {
+        if (isGoogleMapsActive()) {
+            startNaviTo(
+                PlaceResult(
+                    title = "吉隆坡双子塔 (KLCC)",
+                    snippet = "Kuala Lumpur City Centre, Malaysia",
+                    lat = 3.1578,
+                    lng = 101.7123,
+                )
+            )
+            return
+        }
         val last = enRoute.latestLocation()
         if (last != null && last.latitude > 3.86 && last.latitude < 53.55 && last.longitude > 73.66 && last.longitude < 135.05) {
             beginNavigation(
@@ -895,6 +992,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopCurrentNavigation() {
+        if (isGoogleMapsActive()) {
+            googleMapEngine.stopNavigation()
+            googleRoutePolyline?.remove()
+            googleRoutePolyline = null
+            stopButton.visibility = View.GONE
+            startButton.visibility = View.VISIBLE
+            startButton.isEnabled = true
+            statusText.setText(R.string.nav_standby_distance_time)
+            roadNameText.setText(R.string.status_navigation_stopped)
+            copilot.speakDirect(getString(R.string.status_navigation_stopped))
+            return
+        }
         stopButton.visibility = View.GONE
         startButton.visibility = View.VISIBLE
         startButton.isEnabled = true
