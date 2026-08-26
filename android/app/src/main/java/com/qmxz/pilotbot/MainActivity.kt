@@ -11,6 +11,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import android.view.HapticFeedbackConstants
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -255,14 +256,28 @@ class MainActivity : AppCompatActivity() {
             copilot = copilot,
             onListeningState = { listening ->
                 renderOnMain {
-                    micButton.text = if (listening) "🎙️ 正在倾听中..." else getString(R.string.mic_button)
+                    if (listening) {
+                        micButton.text = "🔴 正在倾听 (点击发送)"
+                        micButton.setBackgroundColor(android.graphics.Color.parseColor("#EF4444"))
+                    } else {
+                        micButton.text = getString(R.string.mic_button)
+                        micButton.setBackgroundColor(android.graphics.Color.parseColor("#6366F1"))
+                    }
+                }
+            },
+            onStatusUpdate = { status ->
+                renderOnMain {
+                    if (status.isNotEmpty()) {
+                        copilotText.text = status
+                    }
                 }
             },
             onUserText = { text -> appendTranscript(getString(R.string.transcript_user), text) },
             onListenError = { msg ->
                 renderOnMain {
-                    roadNameText.text = "听不清：$msg"
-                    Toast.makeText(this, "语音识别提示：$msg", Toast.LENGTH_SHORT).show()
+                    roadNameText.text = "识别提示：$msg"
+                    copilotText.text = "💡 语音提示：$msg"
+                    Toast.makeText(this, "语音识别提示：$msg", Toast.LENGTH_LONG).show()
                 }
             },
             onUtterance = { utterance -> renderOnMain { handleUserUtterance(utterance) } },
@@ -693,17 +708,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onMicPressed() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            voiceController.toggleMic()
-        } else {
+        micButton.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(
                 this,
                 arrayOf(Manifest.permission.RECORD_AUDIO),
                 MIC_PERMISSION_REQUEST,
             )
+            return
         }
+        val apiKey = appConfig.endpoint.apiKey.trim()
+        if (apiKey.isBlank() && !smartStt.isSystemAsrAvailable) {
+            Toast.makeText(this, "💡 请先在右上角「设置」中填入 API Key 开启语音对话！", Toast.LENGTH_LONG).show()
+            openSettings()
+            return
+        }
+        voiceController.toggleMic()
     }
 
     private fun requestLocationThenStartNavigation() {

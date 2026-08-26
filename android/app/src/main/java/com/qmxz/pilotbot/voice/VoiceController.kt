@@ -1,5 +1,6 @@
 package com.qmxz.pilotbot.voice
 
+import com.qmxz.pilotbot.asr.SmartSpeechToText
 import com.qmxz.pilotbot.asr.SpeechToText
 import com.qmxz.pilotbot.config.AppConfig
 import com.qmxz.pilotbot.copilot.CopilotEngine
@@ -10,8 +11,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * Drives the ASR backend according to the selected [ConversationMode] and keeps it in sync with
- * the copilot's speaking window (half-duplex: the mic is paused while the copilot talks, resumed
+ * Coordinates voice interaction according to [ConversationMode].
+ * - Push-to-talk: mic button listens once then stops.
+ * - Continuous / Wake word: hands-free continuous recognition loop (pauses while the copilot speaks, resumes
  * when the reply finishes, so TTS output cannot re-trigger recognition).
  */
 class VoiceController(
@@ -20,6 +22,7 @@ class VoiceController(
     private val copilot: CopilotEngine,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
     private val onListeningState: (Boolean) -> Unit = {},
+    private val onStatusUpdate: (String) -> Unit = {},
     private val onUserText: (String) -> Unit = {},
     private val onListenError: (String) -> Unit = {},
     private val onUtterance: ((String) -> Unit)? = null,
@@ -66,15 +69,18 @@ class VoiceController(
         if (listening) {
             listening = false
             onListeningState(false)
-            (speechToText as? com.qmxz.pilotbot.asr.SmartSpeechToText)?.stopListeningNow()
+            onStatusUpdate("⏳ 正在识别文字...")
+            (speechToText as? SmartSpeechToText)?.stopListeningNow()
             return
         }
         copilot.interrupt()
         listening = true
         onListeningState(true)
+        onStatusUpdate("👂 正在倾听，请说话...")
         scope.launch {
             try {
                 val text = speechToText.listenOnce()
+                onStatusUpdate("")
                 if (text.isNotBlank()) {
                     onUserText(text)
                     if (onUtterance != null) {
@@ -86,6 +92,7 @@ class VoiceController(
                     onListenError("未检测到有效语音，请重试")
                 }
             } catch (e: Exception) {
+                onStatusUpdate("")
                 onListenError(e.message ?: "识别失败")
             } finally {
                 listening = false
@@ -97,6 +104,7 @@ class VoiceController(
     private fun resumeListening() {
         listening = true
         onListeningState(true)
+        onStatusUpdate("👂 连续对话已开启...")
         val wakeWord = if (config.conversationMode == ConversationMode.WAKE_WORD) config.wakeWord else null
         speechToText.startContinuous(
             onResult = { text -> handleResult(wakeWord, text) },
@@ -107,6 +115,7 @@ class VoiceController(
     private fun pauseListening() {
         listening = false
         onListeningState(false)
+        onStatusUpdate("")
         speechToText.cancel()
     }
 
