@@ -61,7 +61,7 @@ class CloudTextToSpeech(
         val baseUrl = config.endpoint.baseUrl.trim()
         val speechUrl = resolveSpeechUrl(baseUrl)
         val model = resolveTtsModel(baseUrl)
-        val voice = resolveTtsVoice(baseUrl)
+        val voice = resolveTtsVoice(baseUrl, config.personaId)
 
         val payload = JSONObject().apply {
             put("model", model)
@@ -175,11 +175,21 @@ class CloudTextToSpeech(
             }
         }
 
-        fun resolveTtsVoice(baseUrl: String): String {
+        fun resolveTtsVoice(baseUrl: String, personaId: String = ""): String {
             val lower = baseUrl.lowercase()
             return when {
-                lower.contains("siliconflow") -> "FunAudioLLM/CosyVoice2-0.5B:alex"
-                else -> "alloy"
+                lower.contains("siliconflow") -> when (personaId) {
+                    "cheerful" -> "FunAudioLLM/CosyVoice2-0.5B:anna"
+                    "calm" -> "FunAudioLLM/CosyVoice2-0.5B:alex"
+                    "sarcastic" -> "FunAudioLLM/CosyVoice2-0.5B:charles"
+                    else -> "FunAudioLLM/CosyVoice2-0.5B:anna" // Default to warm lively anna
+                }
+                else -> when (personaId) {
+                    "cheerful" -> "nova"
+                    "calm" -> "onyx"
+                    "sarcastic" -> "fable"
+                    else -> "alloy"
+                }
             }
         }
 
