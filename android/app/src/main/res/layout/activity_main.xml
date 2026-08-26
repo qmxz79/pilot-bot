@@ -71,15 +71,17 @@
             <EditText
                 android:id="@+id/searchInput"
                 android:layout_width="0dp"
-                android:layout_height="38dp"
+                android:layout_height="44dp"
                 android:layout_weight="1"
-                android:background="@android:drawable/edit_text"
+                android:background="@drawable/bg_search_input"
                 android:hint="@string/search_hint"
                 android:imeOptions="actionSearch"
                 android:inputType="text"
                 android:maxLines="1"
-                android:paddingHorizontal="10dp"
-                android:textSize="13sp" />
+                android:textColor="#0F172A"
+                android:textColorHint="#94A3B8"
+                android:textSize="15sp"
+                android:textStyle="bold" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/searchButton"

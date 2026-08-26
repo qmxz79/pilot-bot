@@ -12,6 +12,8 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.view.HapticFeedbackConstants
+import android.text.Editable
+import android.text.TextWatcher
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -210,6 +212,29 @@ class MainActivity : AppCompatActivity() {
             apiKeyProvider = { appConfig.googleMapsApiKey },
         )
         googleMapEngine.bindWebView(googleMapView) { toggleFullscreenMapMode() }
+
+        // Real-time address auto-complete suggestions on search input typing
+        var searchRunnable: Runnable? = null
+        searchInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val query = s?.toString()?.trim().orEmpty()
+                searchRunnable?.let { mainHandler.removeCallbacks(it) }
+                if (query.isEmpty()) {
+                    searchResults.visibility = View.GONE
+                    return
+                }
+                searchRunnable = Runnable {
+                    performSearch(query) { result ->
+                        result.onSuccess { list ->
+                            renderOnMain { showSearchResults(list) }
+                        }
+                    }
+                }
+                mainHandler.postDelayed(searchRunnable!!, 300L)
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
 
         // Top action buttons
         findViewById<MaterialButton>(R.id.searchButton).setOnClickListener { doSearch() }
@@ -828,31 +853,94 @@ class MainActivity : AppCompatActivity() {
     private fun showSearchResults(results: List<PlaceResult>) {
         searchResultList.removeAllViews()
         if (results.isEmpty()) {
-            val empty = TextView(this).apply { text = getString(R.string.search_no_result) }
+            val empty = TextView(this).apply {
+                text = "未找到匹配地址，请换个关键词试试"
+                textSize = 13f
+                setTextColor(android.graphics.Color.parseColor("#64748B"))
+                setPadding(20, 16, 20, 16)
+            }
             searchResultList.addView(empty)
         } else {
             results.forEach { place ->
-                val row = TextView(this).apply {
-                    text = "${place.title}\n  ${place.snippet}"
-                    textSize = 14f
-                    setPadding(12, 8, 12, 8)
+                val itemView = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(16, 12, 16, 12)
+                    isClickable = true
+                    isFocusable = true
+                    setBackgroundResource(android.R.drawable.list_selector_background)
+
+                    val titleRow = LinearLayout(context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = android.view.Gravity.CENTER_VERTICAL
+
+                        val icon = TextView(context).apply {
+                            text = "📍 "
+                            textSize = 14f
+                        }
+                        val titleText = TextView(context).apply {
+                            text = place.title
+                            textSize = 15f
+                            setTextColor(android.graphics.Color.parseColor("#0F172A"))
+                            typeface = android.graphics.Typeface.DEFAULT_BOLD
+                        }
+                        addView(icon)
+                        addView(titleText)
+                    }
+
+                    addView(titleRow)
+
+                    if (place.snippet.isNotBlank()) {
+                        val snippetText = TextView(context).apply {
+                            text = place.snippet
+                            textSize = 12f
+                            setTextColor(android.graphics.Color.parseColor("#64748B"))
+                            setPadding(24, 4, 0, 0)
+                        }
+                        addView(snippetText)
+                    }
+
                     setOnClickListener {
+                        searchInput.setText(place.title)
                         searchResults.visibility = View.GONE
                         startNaviTo(place)
                     }
                 }
-                searchResultList.addView(row)
+                searchResultList.addView(itemView)
+
+                val divider = View(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, 1
+                    ).apply { setMargins(16, 0, 16, 0) }
+                    setBackgroundColor(android.graphics.Color.parseColor("#E2E8F0"))
+                }
+                searchResultList.addView(divider)
             }
         }
         searchResults.visibility = View.VISIBLE
     }
 
     private fun startNaviTo(place: PlaceResult) {
-        val start = enRoute.latestLocation()
-        val startLat = start?.latitude ?: 3.1390
-        val startLng = start?.longitude ?: 101.6869
-
         if (isGoogleMapsActive()) {
+            if (place.lat == 0.0 && place.lng == 0.0) {
+                statusText.text = "正在获取 ${place.title} 的经纬度…"
+                googleMapEngine.searchPlaces(place.title, null) { res ->
+                    res.onSuccess { list ->
+                        val matched = list.firstOrNull { it.lat != 0.0 && it.lng != 0.0 } ?: place
+                        renderOnMain { startNaviTo(matched) }
+                    }.onFailure {
+                        renderOnMain {
+                            statusText.text = "获取位置坐标失败"
+                            copilot.speakDirect("无法获取目的地坐标")
+                        }
+                    }
+                }
+                return
+            }
+
+            val startLoc = systemGps.latestLocation()
+            val startLat = startLoc?.latitude ?: enRoute.latestLocation()?.latitude ?: 3.1390
+            val startLng = startLoc?.longitude ?: enRoute.latestLocation()?.longitude ?: 101.6869
+
             statusText.text = "Google Maps 正在规划路线…"
             googleMapEngine.calculateRoute(
                 start = GlobalGeoPoint(lat = startLat, lng = startLng),
@@ -888,6 +976,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        val start = enRoute.latestLocation()
         if (start == null) {
             statusText.text = getString(R.string.search_waiting_location)
             return
