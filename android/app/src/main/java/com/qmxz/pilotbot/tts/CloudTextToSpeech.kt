@@ -179,15 +179,15 @@ class CloudTextToSpeech(
             val lower = baseUrl.lowercase()
             return when {
                 lower.contains("siliconflow") -> when (personaId) {
-                    "cheerful" -> "FunAudioLLM/CosyVoice2-0.5B:anna"
-                    "calm" -> "FunAudioLLM/CosyVoice2-0.5B:alex"
-                    "sarcastic" -> "FunAudioLLM/CosyVoice2-0.5B:charles"
-                    else -> "FunAudioLLM/CosyVoice2-0.5B:anna" // Default to warm lively anna
+                    "cheerful" -> "FunAudioLLM/CosyVoice2-0.5B:anna" // 活泼灵动闺蜜女声
+                    "calm" -> "FunAudioLLM/CosyVoice2-0.5B:benjamin" // 沉稳浑厚成熟老哥男声
+                    "sarcastic" -> "FunAudioLLM/CosyVoice2-0.5B:charles" // 幽默磁性损友男声
+                    else -> "FunAudioLLM/CosyVoice2-0.5B:anna"
                 }
                 else -> when (personaId) {
                     "cheerful" -> "nova"
-                    "calm" -> "onyx"
-                    "sarcastic" -> "fable"
+                    "calm" -> "onyx" // Deep male voice
+                    "sarcastic" -> "echo" // Confident male voice
                     else -> "alloy"
                 }
             }

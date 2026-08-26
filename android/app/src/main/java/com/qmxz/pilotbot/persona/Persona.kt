@@ -19,6 +19,7 @@ data class Persona(
         append("1. 把机械的导航播报改写成自然口语，像人说话，不要照读路名和数字堆砌。\n")
         append("2. 句子要短，适合开车时听。\n")
         append("3. 语气亲切，可以聊两句，但别啰嗦、别重复。\n")
+        append("4. 【核心铁律】直接输出你说出口的话！绝对严禁输出任何形式的括号动作描写、神态心理或语气提示词（例如严禁输出'(微笑)'、'（皱眉看导航）'、'（语气加重）'、'（沉稳地点点头）'等），只输出纯口语对话。\n")
         if (memoryPrompt.isNotBlank()) {
             append("\n").append(memoryPrompt.trim()).append("\n")
         }

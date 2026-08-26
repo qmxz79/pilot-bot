@@ -14,6 +14,7 @@ import com.qmxz.pilotbot.safety.DrivingLoadEstimator
 import com.qmxz.pilotbot.safety.DrivingLoadLevel
 import com.qmxz.pilotbot.safety.FatigueMonitor
 import com.qmxz.pilotbot.safety.SimpleDrivingLoadEstimator
+import com.qmxz.pilotbot.tts.TextSanitizer
 import com.qmxz.pilotbot.tts.TextToSpeech
 import com.qmxz.pilotbot.tts.extractCompleteSentences
 import kotlin.coroutines.cancellation.CancellationException
@@ -212,7 +213,7 @@ class CopilotEngine(
                 withContext(Dispatchers.IO) {
                     llm.streamChat(endpoint, messages, GenerationConfig()) { delta ->
                         fullText.append(delta)
-                        postText(fullText.toString())
+                        postText(TextSanitizer.sanitizeForDisplay(fullText.toString()))
                         val segment = fullText.substring(spokenUpTo)
                         val extraction = extractCompleteSentences(segment)
                         if (extraction.sentences.isNotEmpty()) {
@@ -231,7 +232,7 @@ class CopilotEngine(
                     spokenAnything = true
                     scope.launch { tts.speak(rest) }
                 }
-                val final = fullText.toString()
+                val final = TextSanitizer.sanitizeForDisplay(fullText.toString())
                 onCopilotDone(final)
                 onDone(final)
                 // Close the speaking window: immediately if nothing was queued, else when TTS drains.

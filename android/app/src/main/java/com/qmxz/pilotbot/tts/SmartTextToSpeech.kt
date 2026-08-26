@@ -2,12 +2,11 @@ package com.qmxz.pilotbot.tts
 
 import android.content.Context
 import com.qmxz.pilotbot.config.AppConfig
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * Universal Text-To-Speech engine.
- * Transparently falls back to Cloud TTS (CosyVoice / OpenAI TTS) if device System TTS is unavailable.
+ * Prioritizes ultra-realistic Cloud TTS (CosyVoice2 / OpenAI TTS) with natural human timbre and breath,
+ * and seamlessly falls back to local Android TTS when offline.
  */
 class SmartTextToSpeech(
     context: Context,
@@ -25,36 +24,46 @@ class SmartTextToSpeech(
     }
 
     override val isAvailable: Boolean
-        get() = systemTts.isAvailable || cloudTts.isAvailable
+        get() = cloudTts.isAvailable || systemTts.isAvailable
 
     fun status(): String {
         return when {
-            systemTts.isAvailable -> "语音:就绪"
-            cloudTts.isAvailable -> "语音:云端就绪"
+            cloudTts.isAvailable -> "语音:真人拟人音(CosyVoice)"
+            systemTts.isAvailable -> "语音:系统就绪"
             else -> systemTts.status()
         }
     }
 
     override suspend fun speak(text: String) {
+        val clean = TextSanitizer.sanitizeForSpeech(text)
+        if (clean.isBlank()) return
+
+        if (cloudTts.isAvailable) {
+            try {
+                cloudTts.speak(clean)
+                return
+            } catch (_: Exception) {
+                // If cloud TTS network fails, gracefully fallback to local system TTS
+            }
+        }
+
         if (systemTts.isAvailable) {
-            systemTts.speak(text)
-        } else if (cloudTts.isAvailable) {
-            cloudTts.speak(text)
+            systemTts.speak(clean)
         }
     }
 
     override fun interrupt() {
-        systemTts.interrupt()
         cloudTts.interrupt()
+        systemTts.interrupt()
     }
 
     override fun shutdown() {
-        systemTts.shutdown()
         cloudTts.shutdown()
+        systemTts.shutdown()
     }
 
     override fun setOnIdle(callback: () -> Unit) {
-        systemTts.setOnIdle(callback)
         cloudTts.setOnIdle(callback)
+        systemTts.setOnIdle(callback)
     }
 }
