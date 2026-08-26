@@ -15,8 +15,6 @@
     <string name="unknown_road">未知道路</string>
 
     <string name="open_settings">设置</string>
-    <string name="simulate_broadcast">模拟播报</string>
-    <string name="simulate_narration">模拟跨区叙事</string>
     <string name="copilot_default">你好呀！我是你的副驾老朋友，今天想去哪？直接点麦克风跟我说就行~</string>
     <string name="simulated_broadcast_text">前方 3 公里拥堵，预计通行 6 分钟</string>
     <string name="simulated_narration_text">你正进入北京市朝阳区，跟司机讲讲这里有什么值得提的。</string>

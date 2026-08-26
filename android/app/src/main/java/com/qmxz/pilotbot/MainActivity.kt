@@ -29,8 +29,10 @@ import com.amap.api.maps.model.LatLng
 import com.amap.api.maps.model.Marker
 import com.amap.api.maps.model.MarkerOptions
 import com.amap.api.navi.AMapNaviView
+import android.content.res.ColorStateList
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.android.material.textfield.TextInputEditText
 import com.qmxz.pilotbot.asr.AndroidSpeechToText
 import com.qmxz.pilotbot.asr.SmartSpeechToText
@@ -78,6 +80,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var searchResultList: LinearLayout
     private lateinit var expandButton: MaterialButton
     private lateinit var panelBody: LinearLayout
+    private lateinit var topBar: View
+    private lateinit var bottomDriverCard: View
+    private lateinit var mapFullscreenHint: View
+    private lateinit var floatingMicButton: ExtendedFloatingActionButton
     private lateinit var naviView: AMapNaviView
 
     private lateinit var appConfig: AppConfig
@@ -180,6 +186,10 @@ class MainActivity : AppCompatActivity() {
         searchResultList = findViewById(R.id.searchResultList)
         expandButton = findViewById(R.id.expandButton)
         panelBody = findViewById(R.id.panelBody)
+        topBar = findViewById(R.id.topBar)
+        bottomDriverCard = findViewById(R.id.bottomDriverCard)
+        mapFullscreenHint = findViewById(R.id.mapFullscreenHint)
+        floatingMicButton = findViewById(R.id.floatingMicButton)
 
         // Top action buttons
         findViewById<MaterialButton>(R.id.searchButton).setOnClickListener { doSearch() }
@@ -204,6 +214,8 @@ class MainActivity : AppCompatActivity() {
 
         // Driver card action buttons
         micButton.setOnClickListener { onMicPressed() }
+        floatingMicButton.setOnClickListener { onMicPressed() }
+        mapFullscreenHint.setOnClickListener { toggleFullscreenMapMode() }
         startButton.setOnClickListener { requestLocationThenStartNavigation() }
         stopButton.setOnClickListener { stopCurrentNavigation() }
         expandButton.setOnClickListener { togglePanel() }
@@ -221,12 +233,6 @@ class MainActivity : AppCompatActivity() {
             if (endpoint.baseUrl.isBlank() || endpoint.apiKey.isBlank() || endpoint.model.isBlank()) {
                 openSettings()
             }
-        }
-        findViewById<MaterialButton>(R.id.simulateButton).setOnClickListener {
-            copilot.speakAbout(getString(R.string.simulated_broadcast_text))
-        }
-        findViewById<MaterialButton>(R.id.simulateNarrationButton).setOnClickListener {
-            copilot.narrate(getString(R.string.simulated_narration_text))
         }
 
         updateBubbleTag()
@@ -259,9 +265,13 @@ class MainActivity : AppCompatActivity() {
                     if (listening) {
                         micButton.text = "🔴 正在倾听 (点击发送)"
                         micButton.setBackgroundColor(android.graphics.Color.parseColor("#EF4444"))
+                        floatingMicButton.text = "🔴 正在倾听..."
+                        floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#EF4444"))
                     } else {
                         micButton.text = getString(R.string.mic_button)
                         micButton.setBackgroundColor(android.graphics.Color.parseColor("#6366F1"))
+                        floatingMicButton.text = "🎙️ 按键说话"
+                        floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#6366F1"))
                     }
                 }
             },
@@ -278,6 +288,7 @@ class MainActivity : AppCompatActivity() {
                     roadNameText.text = "识别提示：$msg"
                     copilotText.text = "💡 语音提示：$msg"
                     Toast.makeText(this, "语音识别提示：$msg", Toast.LENGTH_LONG).show()
+                    copilot.speakDirect("语音识别提示：$msg")
                 }
             },
             onUtterance = { utterance -> renderOnMain { handleUserUtterance(utterance) } },
@@ -647,6 +658,27 @@ class MainActivity : AppCompatActivity() {
             override fun getInfoWindow(marker: Marker): View = makeInfoView(marker)
             override fun getInfoContents(marker: Marker): View = makeInfoView(marker)
         })
+        map.setOnMapClickListener {
+            toggleFullscreenMapMode()
+        }
+    }
+
+    private fun toggleFullscreenMapMode() {
+        val isCurrentlyHidden = bottomDriverCard.visibility == View.GONE
+        if (isCurrentlyHidden) {
+            // Restore full driver dashboard
+            topBar.visibility = View.VISIBLE
+            bottomDriverCard.visibility = View.VISIBLE
+            mapFullscreenHint.visibility = View.GONE
+            floatingMicButton.visibility = View.GONE
+        } else {
+            // Enter 100% full screen map view
+            topBar.visibility = View.GONE
+            bottomDriverCard.visibility = View.GONE
+            searchResults.visibility = View.GONE
+            mapFullscreenHint.visibility = View.VISIBLE
+            floatingMicButton.visibility = View.VISIBLE
+        }
     }
 
     private fun makeInfoView(marker: Marker): View = TextView(this).apply {
