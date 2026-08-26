@@ -49,7 +49,6 @@ class NaviSessionCoordinator private constructor(context: Context) {
     private var currentGeneration = 0L
     private var inFlightGeneration: Long? = null
     private var startRequestedGeneration: Long? = null
-    // Retained only while the coordinator owns the route session.
     private var activeRoute: RoutePlan? = null
 
     val isNavigating: Boolean
@@ -304,6 +303,16 @@ class NaviSessionCoordinator private constructor(context: Context) {
     }
 
     init {
+        // Mute AMap SDK built-in speech synthesizer so only Copilot speaks
+        try {
+            val method = navi.javaClass.getMethod("setUseInnerVoice", Boolean::class.javaPrimitiveType, Boolean::class.javaPrimitiveType)
+            method.invoke(navi, false, false)
+        } catch (_: Throwable) {
+            try {
+                val method = navi.javaClass.getMethod("setUseInnerVoice", Boolean::class.javaPrimitiveType)
+                method.invoke(navi, false)
+            } catch (_: Throwable) {}
+        }
         // Exactly one SDK listener is installed for this process coordinator, after listener creation.
         navi.addAMapNaviListener(amapListener)
     }

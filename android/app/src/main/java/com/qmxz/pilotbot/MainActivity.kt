@@ -17,6 +17,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import android.webkit.WebView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -91,6 +92,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mapFullscreenHint: View
     private lateinit var floatingMicButton: ExtendedFloatingActionButton
     private lateinit var naviView: AMapNaviView
+    private lateinit var googleMapView: WebView
 
     private lateinit var appConfig: AppConfig
     private lateinit var memoryStore: MemoryStore
@@ -178,6 +180,8 @@ class MainActivity : AppCompatActivity() {
         aMap = naviView.getMap()
         setupMapClick()
 
+        googleMapView = findViewById(R.id.googleMapView)
+
         statusText = findViewById(R.id.statusText)
         roadNameText = findViewById(R.id.roadNameText)
         voiceStatus = findViewById(R.id.voiceStatus)
@@ -198,6 +202,12 @@ class MainActivity : AppCompatActivity() {
         bottomDriverCard = findViewById(R.id.bottomDriverCard)
         mapFullscreenHint = findViewById(R.id.mapFullscreenHint)
         floatingMicButton = findViewById(R.id.floatingMicButton)
+
+        googleMapEngine = GoogleMapEngine(
+            context = applicationContext,
+            apiKeyProvider = { appConfig.googleMapsApiKey },
+        )
+        googleMapEngine.bindWebView(googleMapView) { toggleFullscreenMapMode() }
 
         // Top action buttons
         findViewById<MaterialButton>(R.id.searchButton).setOnClickListener { doSearch() }
@@ -295,10 +305,6 @@ class MainActivity : AppCompatActivity() {
         )
 
         placeSearch = PlaceSearch(applicationContext)
-        googleMapEngine = GoogleMapEngine(
-            context = applicationContext,
-            apiKeyProvider = { appConfig.googleMapsApiKey },
-        )
         enRoute = AmapEnRouteDataSource(applicationContext)
         enRoute.start(
             onAreaChanged = {},
@@ -353,11 +359,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun mountMapEngine() {
         if (isGoogleMapsActive()) {
+            naviView.visibility = View.GONE
+            googleMapView.visibility = View.VISIBLE
             val keyStatus = if (appConfig.googleMapsApiKey.isNotBlank()) "Google Maps API 就绪 · 全球覆盖" else "Google Maps 模式 · 请在设置填入 Key"
             statusText.text = "🌍 Google Maps 全球模式"
             roadNameText.text = keyStatus
             copilot.updateLocation("Google Maps 全球定位模式")
         } else {
+            googleMapView.visibility = View.GONE
+            naviView.visibility = View.VISIBLE
             if (statusText.text.contains("Google Maps")) {
                 statusText.setText(R.string.nav_standby_distance_time)
                 roadNameText.setText(R.string.nav_standby_road)
@@ -698,6 +708,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateLocationMarker(location: AMapLocation) {
+        googleMapEngine.updateLocation(location.latitude, location.longitude)
         val map = aMap ?: return
         val latLng = LatLng(location.latitude, location.longitude)
         val existing = locationMarker
@@ -833,6 +844,12 @@ class MainActivity : AppCompatActivity() {
                         stopButton.isEnabled = true
                         copilot.speakDirect("已为您通过 Google Maps 规划好前往 ${place.title} 的路线，全程约 $distKm 公里，预计耗时 $mins 分钟。出发！")
                         googleMapEngine.startNavigation()
+                        googleMapEngine.drawRoute(
+                            route = route,
+                            start = GlobalGeoPoint(startLat, startLng),
+                            dest = GlobalGeoPoint(place.lat, place.lng),
+                            destTitle = place.title,
+                        )
                         drawGoogleRouteOnMap(route, place)
                     }
                 }.onFailure { e ->

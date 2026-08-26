@@ -10,6 +10,13 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- 中部全屏地图区域：Google Maps 全球高清互动地图 -->
+    <WebView
+        android:id="@+id/googleMapView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
     <!-- 全屏沉浸模式下的微型唤起药丸提示 -->
     <TextView
         android:id="@+id/mapFullscreenHint"

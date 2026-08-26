@@ -1,13 +1,14 @@
 package com.qmxz.pilotbot.map
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.Gravity
 import android.view.ViewGroup
-import android.widget.FrameLayout
-import android.widget.TextView
+import android.webkit.JavascriptInterface
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import com.qmxz.pilotbot.config.AppConfig
 import com.qmxz.pilotbot.config.MapProvider
 import com.qmxz.pilotbot.search.PlaceResult
@@ -19,16 +20,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 /**
- * Google Maps implementation of [MapEngine].
+ * Google Maps & Global interactive vector map implementation of [MapEngine].
  *
- * Utilizes Google Directions REST API and Google Places API to provide global route calculation,
- * distance, duration, polyline decoding, and POI search for locations outside China (e.g. Malaysia,
- * North America, Europe, SE Asia) without AMap domestic road network restrictions.
+ * Utilizes Google Directions REST API and Google Places API for route calculations and POI search,
+ * and renders interactive global tiles (with Malaysian / SE Asian / Global English road networks)
+ * with location markers, polylines, and tap-to-fullscreen support.
  */
 class GoogleMapEngine(
     private val context: Context,
@@ -45,43 +47,82 @@ class GoogleMapEngine(
     private val mainHandler = Handler(Looper.getMainLooper())
     private var currentLocation: GeoPoint? = null
     private var isNavigating: Boolean = false
-    private var containerView: FrameLayout? = null
-    private var infoTextView: TextView? = null
+    private var webView: WebView? = null
+    private var onMapClickCallback: (() -> Unit)? = null
+    private var mapLoaded = false
+    private var pendingJsCommands = mutableListOf<String>()
 
     override fun init(container: ViewGroup, savedInstanceState: Bundle?) {
-        val root = FrameLayout(container.context).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            )
-            setBackgroundColor(0xFF1E293B.toInt())
+        // Container setup if needed
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    fun bindWebView(view: WebView, onMapClick: () -> Unit) {
+        this.webView = view
+        this.onMapClickCallback = onMapClick
+
+        view.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            databaseEnabled = true
+            loadWithOverviewMode = true
+            useWideViewPort = true
         }
 
-        val tv = TextView(container.context).apply {
-            text = "🌍 Google Maps 全球导航模式\n(Directions & Places REST API)"
-            setTextColor(0xFFE2E8F0.toInt())
-            textSize = 14f
-            gravity = Gravity.CENTER
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER,
-            )
+        view.addJavascriptInterface(object {
+            @JavascriptInterface
+            fun onMapTapped() {
+                mainHandler.post { onMapClickCallback?.invoke() }
+            }
+        }, "AndroidHost")
+
+        view.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                mapLoaded = true
+                currentLocation?.let { updateLocation(it.lat, it.lng) }
+                for (cmd in pendingJsCommands) {
+                    view?.evaluateJavascript(cmd, null)
+                }
+                pendingJsCommands.clear()
+            }
         }
 
-        root.addView(tv)
-        container.addView(root)
-        containerView = root
-        infoTextView = tv
+        loadMapHtml()
     }
 
     override fun updateLocation(lat: Double, lng: Double) {
         currentLocation = GeoPoint(lat, lng)
-        infoTextView?.text = String.format(
-            "🌍 Google Maps 全球模式\n当前位置: %.5f, %.5f",
-            lat,
-            lng,
-        )
+        val js = "if (window.updateUserLocation) { updateUserLocation($lat, $lng); }"
+        executeJs(js)
+    }
+
+    fun drawRoute(route: RouteSummary, start: GeoPoint, dest: GeoPoint, destTitle: String) {
+        val pointsArr = JSONArray()
+        for (pt in route.polylinePoints) {
+            val arr = JSONArray()
+            arr.put(pt.lat)
+            arr.put(pt.lng)
+            pointsArr.put(arr)
+        }
+        val safeTitle = JSONObject.quote(destTitle)
+        val js = "if (window.drawRoute) { drawRoute(${pointsArr}, ${start.lat}, ${start.lng}, ${dest.lat}, ${dest.lng}, $safeTitle); }"
+        executeJs(js)
+    }
+
+    fun clearRoute() {
+        executeJs("if (window.clearRoute) { clearRoute(); }")
+    }
+
+    private fun executeJs(js: String) {
+        mainHandler.post {
+            val wv = webView
+            if (wv != null && mapLoaded) {
+                wv.evaluateJavascript(js, null)
+            } else {
+                pendingJsCommands.add(js)
+            }
+        }
     }
 
     override fun searchPlaces(
@@ -166,12 +207,11 @@ class GoogleMapEngine(
 
     override fun startNavigation() {
         isNavigating = true
-        infoTextView?.text = "🌍 Google Maps 全球导航中..."
     }
 
     override fun stopNavigation() {
         isNavigating = false
-        infoTextView?.text = "🌍 Google Maps 导航已结束"
+        clearRoute()
     }
 
     override fun onResume() {}
@@ -180,20 +220,109 @@ class GoogleMapEngine(
 
     override fun onDestroy() {
         scope.cancel()
-        containerView = null
-        infoTextView = null
+        webView = null
+    }
+
+    private fun loadMapHtml() {
+        val initialLat = currentLocation?.lat ?: 3.1390
+        val initialLng = currentLocation?.lng ?: 101.6869
+
+        val html = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body, html, #map {
+            margin: 0; padding: 0; width: 100%; height: 100%; background: #0f172a;
+        }
+        .user-marker-pulse {
+            width: 20px; height: 20px; border-radius: 50%;
+            background: #2563EB; border: 3px solid #FFFFFF;
+            box-shadow: 0 0 10px rgba(37,99,235,0.8);
+        }
+        .leaflet-control-attribution { display: none !important; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        var map = L.map('map', { zoomControl: false }).setView([$initialLat, $initialLng], 14);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(map);
+
+        var userMarker = null;
+        var routePolyline = null;
+        var destMarker = null;
+
+        function updateUserLocation(lat, lng) {
+            if (!userMarker) {
+                var pulseIcon = L.divIcon({
+                    className: 'user-marker-pulse',
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
+                });
+                userMarker = L.marker([lat, lng], { icon: pulseIcon }).addTo(map);
+                map.setView([lat, lng], 14);
+            } else {
+                userMarker.setLatLng([lat, lng]);
+            }
+        }
+
+        function drawRoute(points, startLat, startLng, destLat, destLng, destTitle) {
+            clearRoute();
+            if (points && points.length > 0) {
+                routePolyline = L.polyline(points, {
+                    color: '#2563EB', weight: 6, opacity: 0.9, lineJoin: 'round'
+                }).addTo(map);
+                map.fitBounds(routePolyline.getBounds(), { padding: [50, 50] });
+            } else {
+                map.setView([destLat, destLng], 14);
+            }
+
+            destMarker = L.marker([destLat, destLng]).addTo(map);
+            if (destTitle) {
+                destMarker.bindPopup('<b>' + destTitle + '</b>').openPopup();
+            }
+        }
+
+        function clearRoute() {
+            if (routePolyline) {
+                map.removeLayer(routePolyline);
+                routePolyline = null;
+            }
+            if (destMarker) {
+                map.removeLayer(destMarker);
+                destMarker = null;
+            }
+        }
+
+        map.on('click', function(e) {
+            if (window.AndroidHost && window.AndroidHost.onMapTapped) {
+                window.AndroidHost.onMapTapped();
+            }
+        });
+    </script>
+</body>
+</html>
+        """.trimIndent()
+
+        webView?.loadDataWithBaseURL("https://maps.googleapis.com", html, "text/html", "UTF-8", null)
     }
 
     companion object {
-        /**
-         * Parses Google Directions API JSON response into [RouteSummary].
-         */
         fun parseDirectionsJson(jsonString: String): Result<RouteSummary> {
             return runCatching {
                 val root = JSONObject(jsonString)
                 val status = root.optString("status", "")
                 if (status != "OK") {
-                    val errorMsg = root.optString("error_message", "Google Directions API status: $status")
+                    val detail = root.optString("error_message", "")
+                    val errorMsg = if (detail.isNotBlank()) "Google Directions API $status: $detail" else "Google Directions API status: $status"
                     throw IllegalStateException(errorMsg)
                 }
 
@@ -236,9 +365,6 @@ class GoogleMapEngine(
             }
         }
 
-        /**
-         * Parses Google Places API JSON response into a list of [PlaceResult].
-         */
         fun parsePlacesJson(jsonString: String): Result<List<PlaceResult>> {
             return runCatching {
                 val root = JSONObject(jsonString)
@@ -268,9 +394,6 @@ class GoogleMapEngine(
             }
         }
 
-        /**
-         * Decodes Google Encoded Polyline algorithm into coordinate points.
-         */
         fun decodePolyline(encoded: String): List<GeoPoint> {
             val poly = ArrayList<GeoPoint>()
             var index = 0
