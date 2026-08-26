@@ -8,6 +8,7 @@ sealed class VoiceIntent {
     data class SearchNearby(val keyword: String) : VoiceIntent()
     data object GoHome : VoiceIntent()
     data object GoCompany : VoiceIntent()
+    data object WhereAmI : VoiceIntent()
     data class RememberFact(val fact: String) : VoiceIntent()
     data class Chat(val text: String) : VoiceIntent()
 }
@@ -16,6 +17,13 @@ sealed class VoiceIntent {
  * Intelligent rule- and keyword-based voice intent parser for in-vehicle scenarios.
  */
 object VoiceIntentParser {
+
+    private val WHERE_AM_I_PATTERNS = listOf(
+        Regex("^(?:请问|麻烦问下)?(?:我|咱们|我们|现在)?(?:现在)?(?:在|处于|到)?(?:哪里|哪儿|什么地方|什么位置|哪)(?:了)?(?:呀|啊|呢|吧)?$"),
+        Regex("^(?:请问)?(?:这是|这里是|当前位置是)(?:哪里|哪儿|什么地方|什么位置)(?:呀|啊|呢|吧)?$"),
+        Regex("^(?:查询|查看|播报)?(?:当前位置|现在位置|我的位置|当前经纬度)$"),
+        Regex(".*(?:我现在在哪里|我现在在哪|我们在哪里|我们在哪|这是哪里|这是哪儿|当前位置|我现在在什么位置|我现在在什么地方).*"),
+    )
 
     private val REMEMBER_PATTERNS = listOf(
         Regex("^(?:请|帮我)?(?:记住|记一下|记录|记下|牢记|记着)[，,：:\\s]*(.+)$"),
@@ -63,6 +71,13 @@ object VoiceIntentParser {
         val clean = raw.replace(Regex("^[\\s,，。？！?!:：~]+|[\\s,，。？！?!:：~]+$"), "")
         if (clean.isEmpty()) {
             return VoiceIntent.Chat(raw)
+        }
+
+        // 0. WhereAmI
+        for (pattern in WHERE_AM_I_PATTERNS) {
+            if (pattern.matches(clean)) {
+                return VoiceIntent.WhereAmI
+            }
         }
 
         // 1. RememberFact

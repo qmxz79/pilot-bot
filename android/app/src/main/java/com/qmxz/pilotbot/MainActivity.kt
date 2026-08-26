@@ -395,14 +395,17 @@ class MainActivity : AppCompatActivity() {
             systemGps.start { lat, lng, addr ->
                 renderOnMain {
                     googleMapEngine.updateLocation(lat, lng)
-                    roadNameText.text = addr ?: "全球定位成功"
+                    val disp = addr ?: "全球定位成功"
+                    roadNameText.text = disp
+                    statusText.text = "🌍 Google Maps 全球模式"
+                    copilot.updateLocation(disp)
                 }
             }
 
-            val keyStatus = if (appConfig.googleMapsApiKey.isNotBlank()) "Google Maps API 就绪 · 全球覆盖" else "Google Maps 模式 · 请在设置填入 Key"
             statusText.text = "🌍 Google Maps 全球模式"
-            roadNameText.text = keyStatus
-            copilot.updateLocation("Google Maps 全球定位模式")
+            val initialAddr = systemGps.latestAddress() ?: if (appConfig.googleMapsApiKey.isNotBlank()) "Google Maps 就绪 · 全球 GPS 卫星定位" else "Google Maps 模式 · 请在设置填入 Key"
+            roadNameText.text = initialAddr
+            systemGps.latestAddress()?.let { copilot.updateLocation(it) }
         } else {
             // Completely stop native GPS and Google Map updates
             systemGps.stop()
@@ -582,6 +585,15 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
+            }
+
+            is VoiceIntent.WhereAmI -> {
+                val addr = if (isGoogleMapsActive()) {
+                    systemGps.latestAddress() ?: "GPS 卫星定位中"
+                } else {
+                    enRoute.latestLocation()?.address ?: "当前定位位置"
+                }
+                copilot.speakDirect("你现在在：$addr")
             }
 
             is VoiceIntent.RememberFact -> {

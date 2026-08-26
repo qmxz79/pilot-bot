@@ -105,6 +105,23 @@ class VoiceIntentParserTest {
     }
 
     @Test
+    fun testWhereAmI() {
+        val utterances = listOf(
+            "我现在在哪里",
+            "我现在在哪",
+            "这是哪里",
+            "这是哪儿",
+            "当前位置",
+            "我现在在什么地方",
+            "请问我们在哪儿呢",
+        )
+        for (u in utterances) {
+            val intent = VoiceIntentParser.parse(u)
+            assertEquals("Expected WhereAmI for '$u'", VoiceIntent.WhereAmI, intent)
+        }
+    }
+
+    @Test
     fun testChatFallback() {
         val utterances = listOf(
             "今天天气怎么样",

@@ -2,20 +2,30 @@ package com.qmxz.pilotbot.enroute
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.location.Address
+import android.location.Geocoder
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.Locale
 
 /**
- * Native Android OS GPS & Network location provider.
+ * Native Android OS GPS & Network location provider with offline/system reverse geocoding.
  *
  * Directly interfaces with device GPS chipsets (android.location.LocationManager) without
- * calling any third-party SDK servers (such as AMap or Baidu), consuming 0 tokens and 0 cloud API quota.
- * Ideal for global usage (e.g. Malaysia, Europe, Americas).
+ * calling third-party proprietary location servers, consuming 0 tokens and 0 cloud API quota.
+ * Automatically resolves coordinates into human-readable street & city names via Android system Geocoder.
  */
 class SystemGpsDataSource(private val context: Context) : LocationListener {
 
@@ -23,12 +33,16 @@ class SystemGpsDataSource(private val context: Context) : LocationListener {
         context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @Volatile
     private var isRunning = false
 
     @Volatile
     private var latestLoc: Location? = null
+
+    @Volatile
+    private var latestAddr: String? = null
 
     @Volatile
     private var onLocationCallback: ((Double, Double, String?) -> Unit)? = null
@@ -42,7 +56,7 @@ class SystemGpsDataSource(private val context: Context) : LocationListener {
         val lm = locationManager ?: return
 
         try {
-            // Check last known location
+            // 1. Immediately grab best cached location
             val gpsLast = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
             val netLast = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
             val best = when {
@@ -52,17 +66,20 @@ class SystemGpsDataSource(private val context: Context) : LocationListener {
             }
             if (best != null) {
                 latestLoc = best
-                mainHandler.post {
-                    onLocationCallback?.invoke(best.latitude, best.longitude, "全球 GPS 硬件定位")
+                resolveAddressAsync(best.latitude, best.longitude) { addr ->
+                    latestAddr = addr
+                    mainHandler.post {
+                        onLocationCallback?.invoke(best.latitude, best.longitude, addr)
+                    }
                 }
             }
 
-            // Register continuous updates with minTime = 3000ms, minDistance = 2m
+            // 2. Request continuous location updates
             if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 3000L, 2f, this, Looper.getMainLooper())
+                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2000L, 2f, this, Looper.getMainLooper())
             }
             if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 5000L, 5f, this, Looper.getMainLooper())
+                lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 4000L, 5f, this, Looper.getMainLooper())
             }
         } catch (e: SecurityException) {
             Log.w("SystemGpsDataSource", "Location permission missing: ${e.message}")
@@ -82,9 +99,48 @@ class SystemGpsDataSource(private val context: Context) : LocationListener {
 
     fun latestLocation(): Location? = latestLoc
 
+    fun latestAddress(): String? = latestAddr
+
     override fun onLocationChanged(location: Location) {
         latestLoc = location
-        onLocationCallback?.invoke(location.latitude, location.longitude, "全球 GPS 硬件定位")
+        resolveAddressAsync(location.latitude, location.longitude) { addr ->
+            latestAddr = addr
+            mainHandler.post {
+                onLocationCallback?.invoke(location.latitude, location.longitude, addr)
+            }
+        }
+    }
+
+    private fun resolveAddressAsync(lat: Double, lng: Double, callback: (String) -> Unit) {
+        scope.launch {
+            val addr = try {
+                if (Geocoder.isPresent()) {
+                    val geocoder = Geocoder(context, Locale.getDefault())
+                    val addresses = geocoder.getFromLocation(lat, lng, 1)
+                    if (!addresses.isNullOrEmpty()) {
+                        formatAddress(addresses[0])
+                    } else {
+                        "GPS (经度: ${String.format("%.4f", lng)}, 纬度: ${String.format("%.4f", lat)})"
+                    }
+                } else {
+                    "GPS (经度: ${String.format("%.4f", lng)}, 纬度: ${String.format("%.4f", lat)})"
+                }
+            } catch (e: Exception) {
+                "GPS (经度: ${String.format("%.4f", lng)}, 纬度: ${String.format("%.4f", lat)})"
+            }
+            callback(addr)
+        }
+    }
+
+    private fun formatAddress(a: Address): String {
+        val thoroughfare = a.thoroughfare ?: a.subThoroughfare ?: a.featureName
+        val subLocality = a.subLocality ?: a.locality ?: a.adminArea
+        val country = a.countryName ?: ""
+        return buildList {
+            if (!thoroughfare.isNullOrBlank()) add(thoroughfare)
+            if (!subLocality.isNullOrBlank() && subLocality != thoroughfare) add(subLocality)
+            if (country.isNotBlank() && !subLocality.orEmpty().contains(country)) add(country)
+        }.joinToString(", ").ifBlank { a.getAddressLine(0) ?: "当前定位地点" }
     }
 
     @Deprecated("Deprecated in Java")
