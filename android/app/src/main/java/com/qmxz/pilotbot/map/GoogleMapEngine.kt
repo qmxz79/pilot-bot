@@ -18,8 +18,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
@@ -28,9 +30,9 @@ import java.util.concurrent.TimeUnit
 /**
  * Google Maps & Global interactive vector map implementation of [MapEngine].
  *
- * Utilizes Google Directions REST API and Google Places API for route calculations and POI search,
- * and renders interactive global tiles (with Malaysian / SE Asian / Global English road networks)
- * with location markers, polylines, and tap-to-fullscreen support.
+ * Utilizes Google Places API (New - v1), Legacy Places API, and Google Directions REST API for
+ * route calculations and POI search, and renders interactive global tiles (with Malaysian / SE Asian / Global
+ * English road networks) with location markers, polylines, and tap-to-fullscreen support.
  */
 class GoogleMapEngine(
     private val context: Context,
@@ -52,9 +54,7 @@ class GoogleMapEngine(
     private var mapLoaded = false
     private var pendingJsCommands = mutableListOf<String>()
 
-    override fun init(container: ViewGroup, savedInstanceState: Bundle?) {
-        // Container setup if needed
-    }
+    override fun init(container: ViewGroup, savedInstanceState: Bundle?) {}
 
     @SuppressLint("SetJavaScriptEnabled")
     fun bindWebView(view: WebView, onMapClick: () -> Unit) {
@@ -139,6 +139,74 @@ class GoogleMapEngine(
         val queryText = if (!city.isNullOrBlank()) "$keyword $city" else keyword
 
         scope.launch(Dispatchers.IO) {
+            // 1. Try Google Places API (New) - v1/places:searchText (Standard for all new Google Cloud projects)
+            val newApiResult = tryPlacesNewSearch(queryText, apiKey)
+            if (newApiResult.isSuccess && newApiResult.getOrNull()?.isNotEmpty() == true) {
+                withContext(Dispatchers.Main) { callback(newApiResult) }
+                return@launch
+            }
+
+            // 2. Fallback to Legacy Places API (Text Search)
+            val legacyResult = tryLegacyPlacesSearch(queryText, apiKey)
+            if (legacyResult.isSuccess && legacyResult.getOrNull()?.isNotEmpty() == true) {
+                withContext(Dispatchers.Main) { callback(legacyResult) }
+                return@launch
+            }
+
+            // 3. Fallback to Geocoding API
+            val geocodeResult = tryGeocodingSearch(queryText, apiKey)
+            withContext(Dispatchers.Main) {
+                if (geocodeResult.isSuccess && geocodeResult.getOrNull()?.isNotEmpty() == true) {
+                    callback(geocodeResult)
+                } else {
+                    // Return the most informative failure
+                    val finalErr = newApiResult.exceptionOrNull()
+                        ?: legacyResult.exceptionOrNull()
+                        ?: geocodeResult.exceptionOrNull()
+                        ?: IllegalStateException("未找到与「$queryText」匹配的地点")
+                    callback(Result.failure(finalErr))
+                }
+            }
+        }
+    }
+
+    private fun tryPlacesNewSearch(queryText: String, apiKey: String): Result<List<PlaceResult>> {
+        return try {
+            val url = "https://places.googleapis.com/v1/places:searchText"
+            val payload = JSONObject().apply {
+                put("textQuery", queryText)
+                currentLocation?.let { loc ->
+                    put("locationBias", JSONObject().apply {
+                        put("circle", JSONObject().apply {
+                            put("center", JSONObject().apply {
+                                put("latitude", loc.lat)
+                                put("longitude", loc.lng)
+                            })
+                            put("radius", 50000.0)
+                        })
+                    })
+                }
+            }
+
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Content-Type", "application/json")
+                .addHeader("X-Goog-Api-Key", apiKey)
+                .addHeader("X-Goog-FieldMask", "places.displayName,places.formattedAddress,places.location")
+                .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .build()
+
+            httpClient.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                parsePlacesNewJson(body)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun tryLegacyPlacesSearch(queryText: String, apiKey: String): Result<List<PlaceResult>> {
+        return try {
             val encodedQuery = runCatching { URLEncoder.encode(queryText, "UTF-8") }.getOrDefault(queryText)
             val locationParam = currentLocation?.let { "&location=${it.lat},${it.lng}&radius=50000" } ?: ""
             val url = "https://maps.googleapis.com/maps/api/place/textsearch/json?query=$encodedQuery$locationParam&key=$apiKey"
@@ -148,22 +216,31 @@ class GoogleMapEngine(
                 .get()
                 .build()
 
-            val result = try {
-                httpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        Result.failure(IllegalStateException("Google Places HTTP ${response.code}: ${response.message}"))
-                    } else {
-                        val body = response.body?.string().orEmpty()
-                        parsePlacesJson(body)
-                    }
-                }
-            } catch (e: Exception) {
-                Result.failure(e)
+            httpClient.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                parseLegacyPlacesJson(body)
             }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
-            withContext(Dispatchers.Main) {
-                callback(result)
+    private fun tryGeocodingSearch(queryText: String, apiKey: String): Result<List<PlaceResult>> {
+        return try {
+            val encodedQuery = runCatching { URLEncoder.encode(queryText, "UTF-8") }.getOrDefault(queryText)
+            val url = "https://maps.googleapis.com/maps/api/geocode/json?address=$encodedQuery&key=$apiKey"
+
+            val request = Request.Builder()
+                .url(url)
+                .get()
+                .build()
+
+            httpClient.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                parseGeocodeJson(body)
             }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -316,6 +393,92 @@ class GoogleMapEngine(
     }
 
     companion object {
+        fun parsePlacesNewJson(jsonString: String): Result<List<PlaceResult>> {
+            return runCatching {
+                val root = JSONObject(jsonString)
+                if (root.has("error")) {
+                    val errorObj = root.getJSONObject("error")
+                    val msg = errorObj.optString("message", "Places API (New) 错误")
+                    throw IllegalStateException(msg)
+                }
+
+                val placesArr = root.optJSONArray("places") ?: return@runCatching emptyList()
+                val list = mutableListOf<PlaceResult>()
+                for (i in 0 until placesArr.length()) {
+                    val p = placesArr.getJSONObject(i)
+                    val display = p.optJSONObject("displayName")?.optString("text", "") ?: ""
+                    val formatted = p.optString("formattedAddress", "")
+                    val loc = p.optJSONObject("location")
+                    val lat = loc?.optDouble("latitude", 0.0) ?: 0.0
+                    val lng = loc?.optDouble("longitude", 0.0) ?: 0.0
+                    if (display.isNotBlank() || formatted.isNotBlank()) {
+                        list.add(
+                            PlaceResult(
+                                title = if (display.isNotBlank()) display else formatted,
+                                snippet = formatted,
+                                lat = lat,
+                                lng = lng,
+                            )
+                        )
+                    }
+                }
+                list
+            }
+        }
+
+        fun parseLegacyPlacesJson(jsonString: String): Result<List<PlaceResult>> {
+            return runCatching {
+                val root = JSONObject(jsonString)
+                val status = root.optString("status", "")
+                if (status == "ZERO_RESULTS") {
+                    return@runCatching emptyList()
+                }
+                if (status != "OK") {
+                    val detail = root.optString("error_message", "")
+                    val errorMsg = if (detail.isNotBlank()) "Google Places API $status: $detail" else "Google Places API status: $status"
+                    throw IllegalStateException(errorMsg)
+                }
+
+                val results = root.optJSONArray("results") ?: return@runCatching emptyList()
+                val places = mutableListOf<PlaceResult>()
+                for (i in 0 until results.length()) {
+                    val item = results.getJSONObject(i)
+                    val name = item.optString("name", "")
+                    val address = item.optString("formatted_address", item.optString("vicinity", ""))
+                    val geometry = item.optJSONObject("geometry")
+                    val location = geometry?.optJSONObject("location")
+                    val lat = location?.optDouble("lat", 0.0) ?: 0.0
+                    val lng = location?.optDouble("lng", 0.0) ?: 0.0
+                    places.add(PlaceResult(title = name, snippet = address, lat = lat, lng = lng))
+                }
+                places
+            }
+        }
+
+        fun parseGeocodeJson(jsonString: String): Result<List<PlaceResult>> {
+            return runCatching {
+                val root = JSONObject(jsonString)
+                val status = root.optString("status", "")
+                if (status == "ZERO_RESULTS") return@runCatching emptyList()
+                if (status != "OK") {
+                    val detail = root.optString("error_message", "")
+                    throw IllegalStateException(if (detail.isNotBlank()) detail else "Geocoding API status: $status")
+                }
+                val results = root.optJSONArray("results") ?: return@runCatching emptyList()
+                val list = mutableListOf<PlaceResult>()
+                for (i in 0 until results.length()) {
+                    val item = results.getJSONObject(i)
+                    val address = item.optString("formatted_address", "")
+                    val geometry = item.optJSONObject("geometry")
+                    val location = geometry?.optJSONObject("location")
+                    val lat = location?.optDouble("lat", 0.0) ?: 0.0
+                    val lng = location?.optDouble("lng", 0.0) ?: 0.0
+                    list.add(PlaceResult(title = address, snippet = address, lat = lat, lng = lng))
+                }
+                list
+            }
+        }
+
         fun parseDirectionsJson(jsonString: String): Result<RouteSummary> {
             return runCatching {
                 val root = JSONObject(jsonString)
@@ -362,35 +525,6 @@ class GoogleMapEngine(
                     routeName = if (summary.isNotBlank()) summary else "Google 推荐路线",
                     polylinePoints = polylinePoints,
                 )
-            }
-        }
-
-        fun parsePlacesJson(jsonString: String): Result<List<PlaceResult>> {
-            return runCatching {
-                val root = JSONObject(jsonString)
-                val status = root.optString("status", "")
-                if (status == "ZERO_RESULTS") {
-                    return@runCatching emptyList()
-                }
-                if (status != "OK") {
-                    val detail = root.optString("error_message", "")
-                    val errorMsg = if (detail.isNotBlank()) "Google Places API $status: $detail" else "Google Places API status: $status"
-                    throw IllegalStateException(errorMsg)
-                }
-
-                val results = root.optJSONArray("results") ?: return@runCatching emptyList()
-                val places = mutableListOf<PlaceResult>()
-                for (i in 0 until results.length()) {
-                    val item = results.getJSONObject(i)
-                    val name = item.optString("name", "")
-                    val address = item.optString("formatted_address", item.optString("vicinity", ""))
-                    val geometry = item.optJSONObject("geometry")
-                    val location = geometry?.optJSONObject("location")
-                    val lat = location?.optDouble("lat", 0.0) ?: 0.0
-                    val lng = location?.optDouble("lng", 0.0) ?: 0.0
-                    places.add(PlaceResult(title = name, snippet = address, lat = lat, lng = lng))
-                }
-                places
             }
         }
 

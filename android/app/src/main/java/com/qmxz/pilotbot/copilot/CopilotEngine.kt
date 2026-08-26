@@ -23,6 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -49,6 +50,7 @@ class CopilotEngine(
 ) {
     private val history = ChatHistory()
     private var generation: Job? = null
+    private var speechJob: Job? = null
     private var latestState: NaviState? = null
     private var latestNaviText: String? = null
     private var locationDesc: String? = null
@@ -182,11 +184,13 @@ class CopilotEngine(
     /** Cancels the in-flight generation and stops TTS. Call on user speech start or new navi text. */
     fun interrupt() {
         generation?.cancel()
+        speechJob?.cancel()
         tts.interrupt()
     }
 
     fun close() {
         generation?.cancel()
+        speechJob?.cancel()
         scope.cancel()
     }
 
@@ -197,16 +201,19 @@ class CopilotEngine(
             return
         }
 
-        // Cut off the previous generation/TTS, then open a fresh speaking window. interrupt() may
-        // fire a stale TTS-idle, but generationFinished is still false so it cannot close the new
-        // window (see init).
         interrupt()
         speaking = true
         generationFinished = false
         onSpeakingStart()
 
+        val speechChannel = Channel<String>(Channel.UNLIMITED)
+        speechJob = scope.launch {
+            for (sentence in speechChannel) {
+                tts.speak(sentence)
+            }
+        }
+
         val fullText = StringBuilder()
-        // Offset into fullText already handed to TTS; used to speak only new sentences.
         var spokenUpTo = 0
         var spokenAnything = false
 
@@ -223,7 +230,7 @@ class CopilotEngine(
                             if (tts.isAvailable) {
                                 spokenAnything = true
                                 for (sentence in extraction.sentences) {
-                                    scope.launch { tts.speak(sentence) }
+                                    speechChannel.trySend(sentence)
                                 }
                             }
                         }
@@ -232,18 +239,19 @@ class CopilotEngine(
                 val rest = fullText.substring(spokenUpTo).trim()
                 if (rest.isNotEmpty() && tts.isAvailable) {
                     spokenAnything = true
-                    scope.launch { tts.speak(rest) }
+                    speechChannel.trySend(rest)
                 }
+                speechChannel.close()
                 val final = TextSanitizer.sanitizeForDisplay(fullText.toString())
                 onCopilotDone(final)
                 onDone(final)
-                // Close the speaking window: immediately if nothing was queued, else when TTS drains.
                 generationFinished = true
                 if (!spokenAnything) maybeEndSpeaking()
             } catch (e: CancellationException) {
+                speechChannel.close()
                 throw e
             } catch (e: Exception) {
-                // Surface LLM/network failures with actionable diagnosis.
+                speechChannel.close()
                 val errorMsg = when {
                     e.message?.contains("401") == true -> "❌ 认证失败(401)：请在「设置」中核对 API Key 是否正确"
                     e.message?.contains("404") == true -> "❌ 接口不存在(404)：请在「设置」中检查 base_url 和模型名"

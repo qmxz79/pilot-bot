@@ -6,6 +6,8 @@ import com.qmxz.pilotbot.audio.AudioFocusManager
 import com.qmxz.pilotbot.config.AppConfig
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -32,6 +34,7 @@ class CloudTextToSpeech(
     private var currentPlayer: MediaPlayer? = null
     private val pendingUtterances = ConcurrentHashMap.newKeySet<String>()
     private val utteranceCounter = AtomicLong(0)
+    private val playLock = Mutex()
     @Volatile
     private var idleCallback: (() -> Unit)? = null
 
@@ -50,7 +53,9 @@ class CloudTextToSpeech(
 
         try {
             val audioBytes = fetchSpeechAudio(trimmed, apiKey)
-            playAudioBytes(audioBytes, utteranceId)
+            playLock.withLock {
+                playAudioBytes(audioBytes, utteranceId)
+            }
         } catch (_: Exception) {
             pendingUtterances.remove(utteranceId)
             maybeIdle()

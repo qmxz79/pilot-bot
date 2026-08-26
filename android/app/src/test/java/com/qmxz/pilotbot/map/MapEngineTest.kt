@@ -178,7 +178,7 @@ class MapEngineTest {
         }
         """.trimIndent()
 
-        val result = GoogleMapEngine.parsePlacesJson(json)
+        val result = GoogleMapEngine.parseLegacyPlacesJson(json)
         assertTrue(result.isSuccess)
 
         val places = result.getOrThrow()
@@ -192,6 +192,35 @@ class MapEngineTest {
     }
 
     @Test
+    fun testParseGooglePlacesNewSuccess() {
+        val json = """
+        {
+          "places": [
+            {
+              "displayName": {
+                "text": "椰江富安路边摊"
+              },
+              "formattedAddress": "Jalan SP 2/20, Bandar Saujana Putra, Selangor, Malaysia",
+              "location": {
+                "latitude": 2.9542,
+                "longitude": 101.5831
+              }
+            }
+          ]
+        }
+        """.trimIndent()
+
+        val result = GoogleMapEngine.parsePlacesNewJson(json)
+        assertTrue(result.isSuccess)
+        val list = result.getOrThrow()
+        assertEquals(1, list.size)
+        assertEquals("椰江富安路边摊", list[0].title)
+        assertEquals("Jalan SP 2/20, Bandar Saujana Putra, Selangor, Malaysia", list[0].snippet)
+        assertEquals(2.9542, list[0].lat, 0.0001)
+        assertEquals(101.5831, list[0].lng, 0.0001)
+    }
+
+    @Test
     fun testParseGooglePlacesZeroResults() {
         val json = """
         {
@@ -200,7 +229,7 @@ class MapEngineTest {
         }
         """.trimIndent()
 
-        val result = GoogleMapEngine.parsePlacesJson(json)
+        val result = GoogleMapEngine.parseLegacyPlacesJson(json)
         assertTrue(result.isSuccess)
         assertTrue(result.getOrThrow().isEmpty())
     }
@@ -214,7 +243,7 @@ class MapEngineTest {
         }
         """.trimIndent()
 
-        val result = GoogleMapEngine.parsePlacesJson(json)
+        val result = GoogleMapEngine.parseLegacyPlacesJson(json)
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull()?.message?.contains("OVER_QUERY_LIMIT") == true)
     }
