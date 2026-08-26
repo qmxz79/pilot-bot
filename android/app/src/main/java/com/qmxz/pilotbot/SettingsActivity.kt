@@ -80,12 +80,12 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.presetDeepSeekBtn).setOnClickListener {
             baseUrl.setText("https://api.deepseek.com/v1")
             model.setText("deepseek-chat")
-            Toast.makeText(this, "已填入 DeepSeek 配置，请填入 API Key", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "已填入 DeepSeek 配置。提示：如需语音对讲，推荐使用「⚡ 硅基流动」（含官方 DeepSeek-V3 + 免费语音识别）！", Toast.LENGTH_LONG).show()
         }
         findViewById<MaterialButton>(R.id.presetSiliconFlowBtn).setOnClickListener {
             baseUrl.setText("https://api.siliconflow.cn/v1")
             model.setText("deepseek-ai/DeepSeek-V3")
-            Toast.makeText(this, "已填入 硅基流动 配置，请填入 API Key", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "已填入 硅基流动（包含 DeepSeek-V3 大模型 + 极速语音识别），填入 Key 即可全功能使用！", Toast.LENGTH_LONG).show()
         }
         findViewById<MaterialButton>(R.id.presetQwenBtn).setOnClickListener {
             baseUrl.setText("https://dashscope.aliyuncs.com/compatible-mode/v1")

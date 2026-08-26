@@ -63,19 +63,33 @@ class VoiceController(
     }
 
     private fun pushToTalk() {
+        if (listening) {
+            listening = false
+            onListeningState(false)
+            (speechToText as? com.qmxz.pilotbot.asr.SmartSpeechToText)?.stopListeningNow()
+            return
+        }
         copilot.interrupt()
+        listening = true
+        onListeningState(true)
         scope.launch {
-            val result = runCatching { speechToText.listenOnce() }
-            val text = result.getOrNull()
-            if (!text.isNullOrBlank()) {
-                onUserText(text)
-                if (onUtterance != null) {
-                    onUtterance.invoke(text)
+            try {
+                val text = speechToText.listenOnce()
+                if (text.isNotBlank()) {
+                    onUserText(text)
+                    if (onUtterance != null) {
+                        onUtterance.invoke(text)
+                    } else {
+                        copilot.chat(text)
+                    }
                 } else {
-                    copilot.chat(text)
+                    onListenError("未检测到有效语音，请重试")
                 }
-            } else {
-                result.exceptionOrNull()?.let { onListenError(it.message ?: "识别失败") }
+            } catch (e: Exception) {
+                onListenError(e.message ?: "识别失败")
+            } finally {
+                listening = false
+                onListeningState(false)
             }
         }
     }

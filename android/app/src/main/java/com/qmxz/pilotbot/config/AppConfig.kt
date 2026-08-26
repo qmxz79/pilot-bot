@@ -55,6 +55,18 @@ class AppConfig(context: Context) {
         get() = prefs.getString(KEY_WAKE_WORD, DEFAULT_WAKE_WORD).orEmpty()
         set(value) = prefs.edit().putString(KEY_WAKE_WORD, value).apply()
 
+    var asrBaseUrl: String
+        get() = prefs.getString(KEY_ASR_BASE_URL, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_ASR_BASE_URL, value).apply()
+
+    var asrApiKey: String
+        get() = prefs.getString(KEY_ASR_API_KEY, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_ASR_API_KEY, value).apply()
+
+    var asrModel: String
+        get() = prefs.getString(KEY_ASR_MODEL, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_ASR_MODEL, value).apply()
+
     /** True only on the very first launch; flips the flag so it cannot fire twice. */
     fun consumeFirstLaunch(): Boolean {
         val first = prefs.getBoolean(KEY_FIRST_LAUNCH, true)
@@ -66,6 +78,9 @@ class AppConfig(context: Context) {
         const val KEY_BASE_URL = "llm_base_url"
         const val KEY_API_KEY = "llm_api_key"
         const val KEY_MODEL = "llm_model"
+        const val KEY_ASR_BASE_URL = "asr_base_url"
+        const val KEY_ASR_API_KEY = "asr_api_key"
+        const val KEY_ASR_MODEL = "asr_model"
         const val KEY_NAME = "persona_name"
         const val KEY_TONE = "persona_tone"
         const val KEY_CATCHPHRASE = "persona_catchphrase"

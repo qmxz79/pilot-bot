@@ -84,8 +84,8 @@ class AudioRecorder {
                     val db = if (rms > 1) (20 * log10(rms / 32768.0)).toFloat().coerceIn(-60f, 0f) else -60f
                     onRmsDb?.invoke(db)
 
-                    // Voice Activity Detection (VAD) heuristic
-                    if (db > -35f) {
+                    // Voice Activity Detection (VAD) heuristic (speaking threshold -50 dB)
+                    if (db > -50f) {
                         if (!speechStarted) {
                             speechStarted = true
                             onSpeechStart?.invoke()
@@ -94,8 +94,8 @@ class AudioRecorder {
                     } else if (speechStarted) {
                         if (silenceStartTime == 0L) {
                             silenceStartTime = System.currentTimeMillis()
-                        } else if (System.currentTimeMillis() - silenceStartTime > 1600L && totalRead > 16000 * 2) {
-                            // 1.6s of silence after speech detected -> auto stop
+                        } else if (System.currentTimeMillis() - silenceStartTime > 1800L && totalRead > 16000 * 2) {
+                            // 1.8s of silence after speech detected -> auto stop
                             break
                         }
                     }

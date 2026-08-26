@@ -24,14 +24,20 @@ class CloudSpeechToText(
      * Sends WAV audio bytes to the cloud speech recognition endpoint and returns the transcribed text.
      */
     suspend fun transcribe(wavBytes: ByteArray): String = withContext(Dispatchers.IO) {
-        val endpoint = config.endpoint
-        val apiKey = endpoint.apiKey.trim()
-        if (apiKey.isBlank()) {
-            throw IllegalStateException("未配置 API Key，请先在「设置」中填入模型 API Key 以开启云端语音识别")
+        val asrKey = config.asrApiKey.trim().ifBlank { config.endpoint.apiKey.trim() }
+        val asrBaseUrl = config.asrBaseUrl.trim().ifBlank { config.endpoint.baseUrl.trim() }
+
+        if (asrKey.isBlank()) {
+            throw IllegalStateException("未配置 API Key，请在「设置」中填入 API Key 开启语音识别")
         }
 
-        val transcriptionUrl = resolveTranscriptionUrl(endpoint.baseUrl)
-        val model = resolveAsrModel(endpoint.baseUrl)
+        val lowerBase = asrBaseUrl.lowercase()
+        if (config.asrApiKey.isBlank() && (lowerBase.contains("deepseek") || lowerBase.contains("moonshot") || lowerBase.contains("bigmodel"))) {
+            throw IllegalStateException("DeepSeek/Kimi 官方未提供语音转写接口。推荐在「设置」中选择「⚡ 硅基流动」（包含 DeepSeek-V3 且支持免费极速语音识别），或单独填入语音 Key！")
+        }
+
+        val transcriptionUrl = resolveTranscriptionUrl(asrBaseUrl)
+        val model = if (config.asrModel.isNotBlank()) config.asrModel.trim() else resolveAsrModel(asrBaseUrl)
 
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
@@ -44,7 +50,7 @@ class CloudSpeechToText(
             .addFormDataPart("language", "zh")
             .build()
 
-        val authHeader = if (apiKey.startsWith("Bearer ", ignoreCase = true)) apiKey else "Bearer $apiKey"
+        val authHeader = if (asrKey.startsWith("Bearer ", ignoreCase = true)) asrKey else "Bearer $asrKey"
         val request = Request.Builder()
             .url(transcriptionUrl)
             .addHeader("Authorization", authHeader)

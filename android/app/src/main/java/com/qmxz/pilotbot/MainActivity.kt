@@ -137,7 +137,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onNaviError(error: NaviError) = renderOnMain {
-            statusText.text = getString(R.string.navi_error_format, error.code, error.message)
+            if (error.code == 3) {
+                statusText.text = "当前处于海外（高德仅支持中国境内路网）"
+                roadNameText.text = "可点击顶部「🗺️ 虚拟行车」体验国内导航解说"
+                copilot.speakDirect("当前 GPS 位于海外，高德导航仅支持中国境内路网。你可以点击顶部的「虚拟行车」体验国内路线与副驾互动！")
+            } else {
+                statusText.text = getString(R.string.navi_error_format, error.code, error.message)
+            }
             startButton.visibility = View.VISIBLE
             startButton.isEnabled = true
             stopButton.visibility = View.GONE
@@ -184,6 +190,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.quickCompanyButton).setOnClickListener { handleUserUtterance("去公司") }
         findViewById<MaterialButton>(R.id.quickGasButton).setOnClickListener { handleUserUtterance("附近加油站") }
         findViewById<MaterialButton>(R.id.quickChargeButton).setOnClickListener { handleUserUtterance("附近充电桩") }
+        findViewById<MaterialButton>(R.id.simChinaNaviButton).setOnClickListener { startSimulatedChinaNavigation() }
         findViewById<MaterialButton>(R.id.locateButton).setOnClickListener { onLocateClick() }
         findViewById<MaterialButton>(R.id.aroundButton).setOnClickListener { onAroundClick() }
 
@@ -738,9 +745,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startTestNavigation() {
+        val last = enRoute.latestLocation()
+        if (last != null && last.latitude > 3.86 && last.latitude < 53.55 && last.longitude > 73.66 && last.longitude < 135.05) {
+            beginNavigation(
+                start = GeoPoint(longitude = last.longitude, latitude = last.latitude),
+                destination = GeoPoint(longitude = last.longitude + 0.01, latitude = last.latitude + 0.01),
+            )
+        } else {
+            startSimulatedChinaNavigation()
+        }
+    }
+
+    private fun startSimulatedChinaNavigation() {
+        copilot.speakDirect("启动北京经典路线虚拟行车：从天安门到奥林匹克公园，出发！")
         beginNavigation(
             start = GeoPoint(longitude = 116.3913, latitude = 39.9075),
-            destination = GeoPoint(longitude = 116.397428, latitude = 39.90923),
+            destination = GeoPoint(longitude = 116.397428, latitude = 39.99230),
         )
     }
 
@@ -807,7 +827,7 @@ class MainActivity : AppCompatActivity() {
     private fun togglePanel() {
         val collapsed = panelBody.visibility == View.GONE
         panelBody.visibility = if (collapsed) View.VISIBLE else View.GONE
-        expandButton.text = getString(if (collapsed) R.string.collapse_panel else R.string.expand_panel)
+        expandButton.text = if (collapsed) "▼ 收起" else "💬 更多"
     }
 
     private fun appendTranscript(role: String, text: String) {
