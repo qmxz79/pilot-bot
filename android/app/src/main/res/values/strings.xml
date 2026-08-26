@@ -89,8 +89,16 @@
     <string name="voice_mode_push_to_talk">按键说话（点一下说一句）</string>
     <string name="voice_mode_continuous">连续对话（回复时自动暂停听，防回声）</string>
     <string name="voice_mode_wake_word">唤醒词触发（说唤醒词才开始）</string>
-    <string name="voice_mode_full_duplex">全双工（后期支持，需流式识别 + 回声消除）</string>
+    <string name="voice_mode_full_duplex">⚡ 全双工模式 (随时说话/随时打断)</string>
+    <string name="mic_button_full_duplex">⚡ 全双工 (随时说话/打断)</string>
+    <string name="mic_button_full_duplex_active">⚡ 全双工 (倾听中/随时打断)</string>
+    <string name="interrupted_copilot_hint">⚡ 已即时打断副驾，正在倾听…</string>
     <string name="settings_wake_word_hint">唤醒词，如 小伴</string>
+
+    <string name="settings_map_section">🗺️ 地图引擎设置</string>
+    <string name="map_provider_amap">🇨🇳 高德地图 (国内车道级)</string>
+    <string name="map_provider_google">🌍 Google Maps (全球覆盖)</string>
+    <string name="settings_google_maps_api_key_hint">Google Maps API Key（全球覆盖可选）</string>
 
     <string name="settings_save">保存</string>
 </resources>

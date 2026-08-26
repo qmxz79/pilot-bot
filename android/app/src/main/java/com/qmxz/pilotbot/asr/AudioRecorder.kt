@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.NoiseSuppressor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -14,19 +16,26 @@ import kotlin.math.log10
 import kotlin.math.sqrt
 
 /**
- * Universal Android microphone PCM recorder.
+ * Universal Android microphone PCM recorder with hardware acoustic enhancements.
  * Records 16kHz 16-bit Mono audio using [AudioRecord] without third-party native libraries.
- * Encodes recorded PCM frames into standard RIFF WAV.
+ *
+ * Automatically attaches hardware-level [AcousticEchoCanceler] and [NoiseSuppressor]
+ * when supported by the underlying device chipset.
+ * Supports both WAV batch capture and streaming chunk-based audio reading.
  */
 class AudioRecorder {
     private val isRecording = AtomicBoolean(false)
     private var audioRecord: AudioRecord? = null
+    private var echoCanceler: AcousticEchoCanceler? = null
+    private var noiseSuppressor: NoiseSuppressor? = null
 
     val recording: Boolean
         get() = isRecording.get()
 
     /**
      * Records audio from the microphone until silence is detected, [stop] is called, or timeout.
+     * Invokes [onChunk] on each read PCM chunk, [onRmsDb] with calculated volume in dB,
+     * and [onSpeechStart] when voice onset activity is detected.
      * Returns standard WAV encoded audio bytes.
      */
     @SuppressLint("MissingPermission")
@@ -34,6 +43,7 @@ class AudioRecorder {
         onRmsDb: ((Float) -> Unit)? = null,
         maxDurationMs: Long = 15000L,
         onSpeechStart: (() -> Unit)? = null,
+        onChunk: ((ByteArray) -> Unit)? = null,
     ): ByteArray = withContext(Dispatchers.IO) {
         val sampleRate = 16000
         val channelConfig = AudioFormat.CHANNEL_IN_MONO
@@ -48,6 +58,9 @@ class AudioRecorder {
             throw IllegalStateException("麦克风初始化失败，请在手机系统设置中授予「录音权限」")
         }
 
+        // Enable hardware Acoustic Echo Canceler and Noise Suppressor if supported
+        attachAudioEffects(record.audioSessionId)
+
         val pcmOut = ByteArrayOutputStream()
         val buffer = ShortArray(bufferSize / 2)
         val byteBuffer = ByteArray(bufferSize)
@@ -56,6 +69,7 @@ class AudioRecorder {
         try {
             record.startRecording()
         } catch (e: Exception) {
+            releaseAudioEffects()
             throw IllegalStateException("启动麦克风失败（${e.message}），请检查是否有其他应用正在占用麦克风")
         }
 
@@ -76,8 +90,11 @@ class AudioRecorder {
                         byteBuffer[i * 2] = (sample.toInt() and 0xFF).toByte()
                         byteBuffer[i * 2 + 1] = ((sample.toInt() shr 8) and 0xFF).toByte()
                     }
-                    pcmOut.write(byteBuffer, 0, shortsRead * 2)
-                    totalRead += shortsRead * 2
+                    val bytesRead = shortsRead * 2
+                    pcmOut.write(byteBuffer, 0, bytesRead)
+                    totalRead += bytesRead
+
+                    onChunk?.invoke(byteBuffer.copyOf(bytesRead))
 
                     val rms = sqrt(sum / shortsRead)
                     val db = if (rms > 1) (20 * log10(rms / 32768.0)).toFloat().coerceIn(-60f, 0f) else -60f
@@ -106,6 +123,7 @@ class AudioRecorder {
             }
         } finally {
             isRecording.set(false)
+            releaseAudioEffects()
             runCatching {
                 if (record.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                     record.stop()
@@ -124,6 +142,121 @@ class AudioRecorder {
         writeWavHeader(wavOut, pcmBytes.size, sampleRate, 1, 16)
         wavOut.write(pcmBytes)
         wavOut.toByteArray()
+    }
+
+    /**
+     * Reads streaming PCM chunks continuously until [stop] is called or timeout.
+     * Used for real-time full-duplex streaming ASR.
+     */
+    @SuppressLint("MissingPermission")
+    suspend fun recordStream(
+        onChunk: (ByteArray, Int) -> Unit,
+        onRmsDb: ((Float) -> Unit)? = null,
+        onSpeechStart: (() -> Unit)? = null,
+        maxDurationMs: Long = Long.MAX_VALUE,
+    ) = withContext(Dispatchers.IO) {
+        val sampleRate = 16000
+        val channelConfig = AudioFormat.CHANNEL_IN_MONO
+        val audioFormat = AudioFormat.ENCODING_PCM_16BIT
+        val minBufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+        val bufferSize = (minBufferSize * 2).coerceAtLeast(4096)
+
+        val record = createAudioRecord(sampleRate, channelConfig, audioFormat, bufferSize)
+        audioRecord = record
+
+        if (record.state != AudioRecord.STATE_INITIALIZED) {
+            throw IllegalStateException("麦克风初始化失败，请在手机系统设置中授予「录音权限」")
+        }
+
+        attachAudioEffects(record.audioSessionId)
+
+        val buffer = ShortArray(bufferSize / 2)
+        val byteBuffer = ByteArray(bufferSize)
+
+        isRecording.set(true)
+        try {
+            record.startRecording()
+        } catch (e: Exception) {
+            releaseAudioEffects()
+            throw IllegalStateException("启动麦克风失败（${e.message}），请检查是否有其他应用正在占用麦克风")
+        }
+
+        val startTime = System.currentTimeMillis()
+        var speechStarted = false
+
+        try {
+            while (isRecording.get() && (System.currentTimeMillis() - startTime) < maxDurationMs) {
+                val shortsRead = record.read(buffer, 0, buffer.size)
+                if (shortsRead > 0) {
+                    var sum = 0.0
+                    for (i in 0 until shortsRead) {
+                        val sample = buffer[i]
+                        sum += sample * sample
+                        byteBuffer[i * 2] = (sample.toInt() and 0xFF).toByte()
+                        byteBuffer[i * 2 + 1] = ((sample.toInt() shr 8) and 0xFF).toByte()
+                    }
+                    val bytesRead = shortsRead * 2
+                    onChunk(byteBuffer, bytesRead)
+
+                    val rms = sqrt(sum / shortsRead)
+                    val db = if (rms > 1) (20 * log10(rms / 32768.0)).toFloat().coerceIn(-60f, 0f) else -60f
+                    onRmsDb?.invoke(db)
+
+                    if (db > -48f) {
+                        if (!speechStarted) {
+                            speechStarted = true
+                            onSpeechStart?.invoke()
+                        }
+                    } else if (db < -55f) {
+                        speechStarted = false
+                    }
+                } else if (shortsRead < 0) {
+                    break
+                } else {
+                    delay(10)
+                }
+            }
+        } finally {
+            isRecording.set(false)
+            releaseAudioEffects()
+            runCatching {
+                if (record.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                    record.stop()
+                }
+                record.release()
+            }
+            audioRecord = null
+        }
+    }
+
+    private fun attachAudioEffects(audioSessionId: Int) {
+        runCatching {
+            if (AcousticEchoCanceler.isAvailable()) {
+                echoCanceler = AcousticEchoCanceler.create(audioSessionId)?.apply {
+                    enabled = true
+                }
+            }
+        }
+        runCatching {
+            if (NoiseSuppressor.isAvailable()) {
+                noiseSuppressor = NoiseSuppressor.create(audioSessionId)?.apply {
+                    enabled = true
+                }
+            }
+        }
+    }
+
+    private fun releaseAudioEffects() {
+        runCatching {
+            echoCanceler?.enabled = false
+            echoCanceler?.release()
+        }
+        echoCanceler = null
+        runCatching {
+            noiseSuppressor?.enabled = false
+            noiseSuppressor?.release()
+        }
+        noiseSuppressor = null
     }
 
     fun stop() {

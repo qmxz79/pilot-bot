@@ -57,6 +57,8 @@ class CopilotEngine(
     private var speaking = false
     private var generationFinished = false
 
+    val isSpeaking: Boolean get() = speaking
+
     init {
         // Resume listening (half-duplex voice modes) once the reply has finished playing.
         // An idle fired by interrupt() while the old generation is being replaced must NOT close

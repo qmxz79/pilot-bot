@@ -15,6 +15,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import com.qmxz.pilotbot.config.AppConfig
+import com.qmxz.pilotbot.config.MapProvider
 import com.qmxz.pilotbot.llm.LlmEndpoint
 import com.qmxz.pilotbot.persona.Persona
 import com.qmxz.pilotbot.persona.PersonaStore
@@ -32,6 +33,10 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var catchphrase: TextInputEditText
     private lateinit var modeRadioGroup: RadioGroup
     private lateinit var wakeWord: TextInputEditText
+    private lateinit var mapProviderRadioGroup: RadioGroup
+    private lateinit var mapProviderAmap: View
+    private lateinit var mapProviderGoogle: View
+    private lateinit var googleMapsApiKey: TextInputEditText
 
     private val presetIds: List<String> =
         listOf(PersonaStore.CUSTOM_ID) + PersonaStore.BUILTINS.map { it.id }
@@ -69,6 +74,10 @@ class SettingsActivity : AppCompatActivity() {
         catchphrase = findViewById(R.id.catchphraseInput)
         modeRadioGroup = findViewById(R.id.modeRadioGroup)
         wakeWord = findViewById(R.id.wakeWordInput)
+        mapProviderRadioGroup = findViewById(R.id.mapProviderRadioGroup)
+        mapProviderAmap = findViewById(R.id.mapProviderAmap)
+        mapProviderGoogle = findViewById(R.id.mapProviderGoogle)
+        googleMapsApiKey = findViewById(R.id.googleMapsApiKeyInput)
 
         config.endpoint.let {
             baseUrl.setText(it.baseUrl)
@@ -136,6 +145,12 @@ class SettingsActivity : AppCompatActivity() {
         }
         wakeWord.setText(config.wakeWord)
 
+        when (config.mapProvider) {
+            MapProvider.GOOGLE, MapProvider.GOOGLE_MAPS -> mapProviderRadioGroup.check(R.id.mapProviderGoogle)
+            else -> mapProviderRadioGroup.check(R.id.mapProviderAmap)
+        }
+        googleMapsApiKey.setText(config.googleMapsApiKey)
+
         findViewById<MaterialButton>(R.id.saveSettingsButton).setOnClickListener {
             val selectedId = presetIds[personaSpinner.selectedItemPosition]
             config.personaId = selectedId
@@ -159,6 +174,11 @@ class SettingsActivity : AppCompatActivity() {
                 else -> ConversationMode.PUSH_TO_TALK
             }
             config.wakeWord = wakeWord.text?.toString()?.trim().orEmpty()
+            config.mapProvider = when (mapProviderRadioGroup.checkedRadioButtonId) {
+                R.id.mapProviderGoogle -> MapProvider.GOOGLE
+                else -> MapProvider.AMAP
+            }
+            config.googleMapsApiKey = googleMapsApiKey.text?.toString()?.trim().orEmpty()
             setResult(RESULT_OK)
             finish()
         }

@@ -7,10 +7,17 @@ import com.qmxz.pilotbot.persona.Persona
 import com.qmxz.pilotbot.persona.PersonaStore
 import com.qmxz.pilotbot.voice.ConversationMode
 
+enum class MapProvider {
+    AMAP,
+    GOOGLE,
+    GOOGLE_MAPS
+}
+
 /** Runtime-editable app config backed by SharedPreferences (no rebuild needed to change keys). */
-class AppConfig(context: Context) {
-    private val prefs: SharedPreferences =
+class AppConfig(private val prefs: SharedPreferences) {
+    constructor(context: Context) : this(
         context.getSharedPreferences("pilot_bot_config", Context.MODE_PRIVATE)
+    )
 
     var endpoint: LlmEndpoint
         get() = LlmEndpoint(
@@ -67,6 +74,16 @@ class AppConfig(context: Context) {
         get() = prefs.getString(KEY_ASR_MODEL, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_ASR_MODEL, value).apply()
 
+    var mapProvider: MapProvider
+        get() = runCatching {
+            MapProvider.valueOf(prefs.getString(KEY_MAP_PROVIDER, MapProvider.AMAP.name).orEmpty())
+        }.getOrDefault(MapProvider.AMAP)
+        set(value) = prefs.edit().putString(KEY_MAP_PROVIDER, value.name).apply()
+
+    var googleMapsApiKey: String
+        get() = prefs.getString(KEY_GOOGLE_MAPS_API_KEY, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_GOOGLE_MAPS_API_KEY, value).apply()
+
     /** True only on the very first launch; flips the flag so it cannot fire twice. */
     fun consumeFirstLaunch(): Boolean {
         val first = prefs.getBoolean(KEY_FIRST_LAUNCH, true)
@@ -88,6 +105,8 @@ class AppConfig(context: Context) {
         const val KEY_MODE = "conversation_mode"
         const val KEY_WAKE_WORD = "wake_word"
         const val KEY_FIRST_LAUNCH = "first_launch"
+        const val KEY_MAP_PROVIDER = "map_provider"
+        const val KEY_GOOGLE_MAPS_API_KEY = "google_maps_api_key"
         const val DEFAULT_NAME = "小伴"
         const val DEFAULT_TONE = "轻松、活泼、像朋友"
         const val DEFAULT_WAKE_WORD = "小伴"

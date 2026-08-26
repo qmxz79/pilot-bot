@@ -37,9 +37,11 @@ import com.google.android.material.textfield.TextInputEditText
 import com.qmxz.pilotbot.asr.AndroidSpeechToText
 import com.qmxz.pilotbot.asr.SmartSpeechToText
 import com.qmxz.pilotbot.config.AppConfig
+import com.qmxz.pilotbot.config.MapProvider
 import com.qmxz.pilotbot.copilot.CopilotEngine
 import com.qmxz.pilotbot.enroute.AmapEnRouteDataSource
 import com.qmxz.pilotbot.llm.OpenAiCompatibleProvider
+import com.qmxz.pilotbot.voice.ConversationMode
 import com.qmxz.pilotbot.memory.MemoryStore
 import com.qmxz.pilotbot.memory.UserMemory
 import com.qmxz.pilotbot.navi.AmapNavigationProvider
@@ -251,7 +253,10 @@ class MainActivity : AppCompatActivity() {
             tts = tts,
             memoryStore = memoryStore,
             onCopilotText = { text -> renderOnMain { copilotText.text = text } },
-            onCopilotDone = { text -> appendTranscript(getString(R.string.transcript_copilot), text) },
+            onCopilotDone = { text ->
+                appendTranscript(getString(R.string.transcript_copilot), text)
+                voiceController.onCopilotText(text)
+            },
             onSpeakingStart = { voiceController.onCopilotSpeakingStart() },
             onSpeakingEnd = { voiceController.onCopilotSpeakingEnd() },
         )
@@ -261,19 +266,7 @@ class MainActivity : AppCompatActivity() {
             speechToText = smartStt,
             copilot = copilot,
             onListeningState = { listening ->
-                renderOnMain {
-                    if (listening) {
-                        micButton.text = "🔴 正在倾听 (点击发送)"
-                        micButton.setBackgroundColor(android.graphics.Color.parseColor("#EF4444"))
-                        floatingMicButton.text = "🔴 正在倾听..."
-                        floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#EF4444"))
-                    } else {
-                        micButton.text = getString(R.string.mic_button)
-                        micButton.setBackgroundColor(android.graphics.Color.parseColor("#6366F1"))
-                        floatingMicButton.text = "🎙️ 按键说话"
-                        floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#6366F1"))
-                    }
-                }
+                renderOnMain { updateMicButtonAppearance(listening) }
             },
             onStatusUpdate = { status ->
                 renderOnMain {
@@ -291,6 +284,7 @@ class MainActivity : AppCompatActivity() {
                     copilot.speakDirect("语音识别提示：$msg")
                 }
             },
+            onInterrupt = { triggerInterruptionFeedback() },
             onUtterance = { utterance -> renderOnMain { handleUserUtterance(utterance) } },
         )
 
@@ -305,6 +299,9 @@ class MainActivity : AppCompatActivity() {
         navigationProvider = AmapNavigationProvider(applicationContext)
         navigationProvider.addListener(naviListener)
 
+        mountMapEngine()
+        updateMicButtonAppearance()
+
         // First-run guidance: jump straight into settings
         if (appConfig.consumeFirstLaunch()) {
             openSettings()
@@ -316,6 +313,69 @@ class MainActivity : AppCompatActivity() {
         naviView.onResume()
         updateBubbleTag()
         refreshVoiceStatus()
+        updateMicButtonAppearance()
+        mountMapEngine()
+    }
+
+    private fun mountMapEngine() {
+        when (appConfig.mapProvider) {
+            MapProvider.GOOGLE, MapProvider.GOOGLE_MAPS -> {
+                statusText.text = "🌍 Google Maps 全球地图引擎已挂载"
+                roadNameText.text = if (appConfig.googleMapsApiKey.isNotBlank()) "Google Maps API 已配置 · 全球路网覆盖" else "Google Maps 模式 · 待填入 API Key"
+                copilot.updateLocation("Google Maps 全球定位模式")
+            }
+            MapProvider.AMAP -> {
+                if (statusText.text.contains("Google Maps")) {
+                    statusText.setText(R.string.nav_standby_distance_time)
+                    roadNameText.setText(R.string.nav_standby_road)
+                }
+            }
+        }
+    }
+
+    private fun updateMicButtonAppearance(listening: Boolean = voiceController.isListening) {
+        if (appConfig.conversationMode == ConversationMode.FULL_DUPLEX) {
+            if (listening) {
+                micButton.text = getString(R.string.mic_button_full_duplex_active)
+                micButton.setBackgroundColor(android.graphics.Color.parseColor("#10B981"))
+                floatingMicButton.text = "⚡ 全双工 (倾听中)"
+                floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#10B981"))
+            } else {
+                micButton.text = getString(R.string.mic_button_full_duplex)
+                micButton.setBackgroundColor(android.graphics.Color.parseColor("#6366F1"))
+                floatingMicButton.text = getString(R.string.mic_button_full_duplex)
+                floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#6366F1"))
+            }
+        } else {
+            if (listening) {
+                micButton.text = "🔴 正在倾听 (点击发送)"
+                micButton.setBackgroundColor(android.graphics.Color.parseColor("#EF4444"))
+                floatingMicButton.text = "🔴 正在倾听..."
+                floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#EF4444"))
+            } else {
+                micButton.text = getString(R.string.mic_button)
+                micButton.setBackgroundColor(android.graphics.Color.parseColor("#6366F1"))
+                floatingMicButton.text = "🎙️ 按键说话"
+                floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#6366F1"))
+            }
+        }
+    }
+
+    private fun triggerInterruptionFeedback() {
+        renderOnMain {
+            micButton.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            copilotText.text = getString(R.string.interrupted_copilot_hint)
+            voiceStatus.text = "⚡ 即时打断"
+
+            // Immediate interruption animation on copilot speech bubble
+            val bubble = findViewById<View>(R.id.copilotBubble)
+            bubble?.animate()
+                ?.scaleX(1.04f)?.scaleY(1.04f)?.alpha(0.85f)
+                ?.setDuration(120)
+                ?.withEndAction {
+                    bubble.animate()?.scaleX(1.0f)?.scaleY(1.0f)?.alpha(1.0f)?.setDuration(120)?.start()
+                }?.start()
+        }
     }
 
     private fun updateBubbleTag() {

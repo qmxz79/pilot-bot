@@ -13,54 +13,102 @@ import kotlinx.coroutines.launch
 /**
  * Coordinates voice interaction according to [ConversationMode].
  * - Push-to-talk: mic button listens once then stops.
- * - Continuous / Wake word: hands-free continuous recognition loop (pauses while the copilot speaks, resumes
- * when the reply finishes, so TTS output cannot re-trigger recognition).
+ * - Continuous: hands-free half-duplex (pauses mic while copilot speaks, resumes after reply).
+ * - Wake word: hands-free with wake word prefix required (with 10-second active turn-taking window).
+ * - Full duplex: continuous listening with mic remaining active while copilot speaks,
+ *   hardware AEC/NS + software [EchoFilter] feedback suppression, and millisecond-level barge-in.
  */
 class VoiceController(
     private val config: AppConfig,
     private val speechToText: SpeechToText,
     private val copilot: CopilotEngine,
+    val echoFilter: EchoFilter = EchoFilter(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
     private val onListeningState: (Boolean) -> Unit = {},
     private val onStatusUpdate: (String) -> Unit = {},
     private val onUserText: (String) -> Unit = {},
     private val onListenError: (String) -> Unit = {},
+    private val onInterrupt: (() -> Unit)? = null,
     private val onUtterance: ((String) -> Unit)? = null,
 ) {
+    companion object {
+        /** Duration of the active multi-turn window where wake word is not required (10 seconds). */
+        const val TURN_TAKING_WINDOW_MS = 10_000L
+    }
+
     private var handsFreeEnabled = false
     private var listening = false
+    private var turnTakingDeadline: Long = 0L
 
     val isListening: Boolean get() = listening
 
-    /** Mic button: one-shot in push-to-talk, a hands-free on/off switch otherwise. */
+    val isHandsFreeEnabled: Boolean get() = handsFreeEnabled
+
+    val isTurnTakingActive: Boolean
+        get() = System.currentTimeMillis() < turnTakingDeadline
+
+    /** Mic button: one-shot in push-to-talk, a hands-free on/off toggle in continuous/duplex modes. */
     fun toggleMic() {
         when (config.conversationMode) {
             ConversationMode.PUSH_TO_TALK -> pushToTalk()
-            ConversationMode.CONTINUOUS, ConversationMode.WAKE_WORD -> {
+            ConversationMode.CONTINUOUS,
+            ConversationMode.WAKE_WORD,
+            ConversationMode.FULL_DUPLEX -> {
                 handsFreeEnabled = !handsFreeEnabled
                 if (handsFreeEnabled) resumeListening() else stopListening()
             }
-            ConversationMode.FULL_DUPLEX -> { /* 后期支持：需流式 ASR + 回声消除 */ }
         }
     }
 
-    /** Copilot began replying: pause the mic so its own voice is not picked up. */
-    fun onCopilotSpeakingStart() {
-        if (listening) pauseListening()
+    /**
+     * Records copilot speech text into [EchoFilter] so subsequent acoustic reflections
+     * can be detected and dropped.
+     */
+    fun onCopilotText(text: String) {
+        echoFilter.recordSpeaking(text)
     }
 
-    /** Copilot finished: resume listening if hands-free is still on. */
+    fun recordCopilotSpeech(text: String) {
+        echoFilter.recordSpeaking(text)
+    }
+
+    /**
+     * Copilot began speaking/playing TTS:
+     * - In [ConversationMode.FULL_DUPLEX]: microphone stays OPEN;
+     * - In [ConversationMode.CONTINUOUS] / [ConversationMode.WAKE_WORD]: pause mic to prevent self-triggering.
+     */
+    fun onCopilotSpeakingStart(spokenText: String? = null) {
+        if (!spokenText.isNullOrBlank()) {
+            echoFilter.recordSpeaking(spokenText)
+        }
+
+        if (config.conversationMode != ConversationMode.FULL_DUPLEX) {
+            if (listening) pauseListening()
+        }
+    }
+
+    /**
+     * Copilot finished speaking:
+     * - Refreshes the 10-second active turn-taking window;
+     * - Resumes listening if hands-free is enabled and mic was paused.
+     */
     fun onCopilotSpeakingEnd() {
-        if (handsFreeEnabled && !listening) resumeListening()
+        turnTakingDeadline = System.currentTimeMillis() + TURN_TAKING_WINDOW_MS
+
+        if (handsFreeEnabled && !listening) {
+            resumeListening()
+        }
     }
 
     fun stopListening() {
         handsFreeEnabled = false
+        turnTakingDeadline = 0L
         pauseListening()
     }
 
     fun shutdown() {
         stopListening()
+        echoFilter.clear()
         speechToText.shutdown()
         scope.cancel()
     }
@@ -81,13 +129,14 @@ class VoiceController(
             try {
                 val text = speechToText.listenOnce()
                 onStatusUpdate("")
-                if (text.isNotBlank()) {
-                    onUserText(text)
-                    if (onUtterance != null) {
-                        onUtterance.invoke(text)
-                    } else {
-                        copilot.chat(text)
+                val trimmed = text.trim()
+                if (trimmed.isNotBlank()) {
+                    if (echoFilter.isEcho(trimmed)) {
+                        onListenError("检测到副驾自身回音，已忽略")
+                        return@launch
                     }
+                    turnTakingDeadline = System.currentTimeMillis() + TURN_TAKING_WINDOW_MS
+                    dispatchUtterance(trimmed)
                 } else {
                     onListenError("未检测到有效语音，请重试")
                 }
@@ -104,11 +153,17 @@ class VoiceController(
     private fun resumeListening() {
         listening = true
         onListeningState(true)
-        onStatusUpdate("👂 连续对话已开启...")
-        val wakeWord = if (config.conversationMode == ConversationMode.WAKE_WORD) config.wakeWord else null
+        val statusText = when (config.conversationMode) {
+            ConversationMode.FULL_DUPLEX -> "👂 全双工实时对话已开启..."
+            ConversationMode.WAKE_WORD -> "👂 唤醒词对话已开启..."
+            ConversationMode.CONTINUOUS -> "👂 连续对话已开启..."
+            ConversationMode.PUSH_TO_TALK -> "👂 正在倾听..."
+        }
+        onStatusUpdate(statusText)
+
         speechToText.startContinuous(
-            onResult = { text -> handleResult(wakeWord, text) },
-            onSpeechStart = { copilot.interrupt() },
+            onResult = { text -> handleResult(text) },
+            onSpeechStart = { handleBargeIn() },
         )
     }
 
@@ -119,16 +174,56 @@ class VoiceController(
         speechToText.cancel()
     }
 
-    private fun handleResult(wakeWord: String?, text: String) {
+    /**
+     * Millisecond-level Barge-in:
+     * When user voice onset / energy is detected, immediately interrupt copilot generation and TTS.
+     */
+    private fun handleBargeIn() {
+        if (copilot.isSpeaking) {
+            copilot.interrupt()
+            onInterrupt?.invoke()
+        } else {
+            copilot.interrupt()
+        }
+    }
+
+    private fun handleResult(text: String) {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
-        val message = if (wakeWord.isNullOrBlank()) {
-            trimmed
-        } else if (trimmed.startsWith(wakeWord)) {
-            trimmed.removePrefix(wakeWord).trim()
-        } else {
-            return // not addressed to the copilot
+
+        // Acoustic Echo Cancellation / Echo Filter check:
+        // Silently drop if transcribed text matches copilot's own recent speech (> 75% similarity)
+        if (echoFilter.isEcho(trimmed)) {
+            return
         }
+
+        val wakeWord = if (config.conversationMode == ConversationMode.WAKE_WORD) config.wakeWord.trim() else null
+
+        val message = if (config.conversationMode == ConversationMode.WAKE_WORD && !wakeWord.isNullOrEmpty()) {
+            if (trimmed.startsWith(wakeWord, ignoreCase = true)) {
+                // Utterance started with wake word
+                trimmed.substring(wakeWord.length).trim()
+            } else if (isTurnTakingActive) {
+                // In active 10s turn-taking window: exempt from wake word requirement
+                trimmed
+            } else {
+                // Outside active turn-taking window without wake word -> ignore
+                return
+            }
+        } else if (!wakeWord.isNullOrEmpty() && trimmed.startsWith(wakeWord, ignoreCase = true)) {
+            trimmed.substring(wakeWord.length).trim()
+        } else {
+            trimmed
+        }
+
+        if (message.isBlank()) return
+
+        // Update active turn-taking deadline upon successful user input
+        turnTakingDeadline = System.currentTimeMillis() + TURN_TAKING_WINDOW_MS
+        dispatchUtterance(message)
+    }
+
+    private fun dispatchUtterance(message: String) {
         onUserText(message)
         if (onUtterance != null) {
             onUtterance.invoke(message)

@@ -11,6 +11,6 @@ enum class ConversationMode {
     /** Hands-free, but only utterances starting with the configured wake word reach the copilot. */
     WAKE_WORD,
 
-    /** Placeholder: needs streaming ASR + echo cancellation; not implemented this round. */
+    /** Hands-free full duplex: continuous listening with hardware AEC/NS, software echo filtering, and millisecond barge-in. */
     FULL_DUPLEX,
 }
