@@ -45,6 +45,7 @@ import com.qmxz.pilotbot.config.AppConfig
 import com.qmxz.pilotbot.config.MapProvider
 import com.qmxz.pilotbot.copilot.CopilotEngine
 import com.qmxz.pilotbot.enroute.AmapEnRouteDataSource
+import com.qmxz.pilotbot.enroute.SystemGpsDataSource
 import com.qmxz.pilotbot.llm.OpenAiCompatibleProvider
 import com.qmxz.pilotbot.voice.ConversationMode
 import com.qmxz.pilotbot.memory.MemoryStore
@@ -102,6 +103,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tts: SmartTextToSpeech
     private lateinit var smartStt: SmartSpeechToText
     private lateinit var enRoute: AmapEnRouteDataSource
+    private lateinit var systemGps: SystemGpsDataSource
     private lateinit var placeSearch: PlaceSearch
     private lateinit var googleMapEngine: GoogleMapEngine
 
@@ -305,12 +307,8 @@ class MainActivity : AppCompatActivity() {
         )
 
         placeSearch = PlaceSearch(applicationContext)
+        systemGps = SystemGpsDataSource(applicationContext)
         enRoute = AmapEnRouteDataSource(applicationContext)
-        enRoute.start(
-            onAreaChanged = {},
-            onFirstFix = { handleLocationFix(it) },
-            onLocation = { loc -> updateLocationMarker(loc) },
-        )
 
         navigationProvider = AmapNavigationProvider(applicationContext)
         navigationProvider.addListener(naviListener)
@@ -326,7 +324,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        naviView.onResume()
+        if (!isGoogleMapsActive()) {
+            naviView.onResume()
+        }
         updateBubbleTag()
         refreshVoiceStatus()
         updateMicButtonAppearance()
@@ -345,10 +345,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun performSearchNearby(keyword: String, callback: (Result<List<PlaceResult>>) -> Unit) {
-        val loc = enRoute.latestLocation()
         if (isGoogleMapsActive()) {
             googleMapEngine.searchPlaces(keyword, null, callback)
         } else {
+            val loc = enRoute.latestLocation()
             if (loc != null) {
                 placeSearch.searchAround(loc.latitude, loc.longitude, 3000, keyword, callback)
             } else {
@@ -359,15 +359,40 @@ class MainActivity : AppCompatActivity() {
 
     private fun mountMapEngine() {
         if (isGoogleMapsActive()) {
+            // Completely stop AMap background location, navi, and view to consume 0 AMap tokens/quota
+            enRoute.stop()
+            suspend { navigationProvider.stopNavi() }.startCoroutine(handleCompletion)
+            naviView.onPause()
             naviView.visibility = View.GONE
+
+            // Display Google Map WebView and use device native GPS
             googleMapView.visibility = View.VISIBLE
+            systemGps.start { lat, lng, addr ->
+                renderOnMain {
+                    googleMapEngine.updateLocation(lat, lng)
+                    roadNameText.text = addr ?: "全球定位成功"
+                }
+            }
+
             val keyStatus = if (appConfig.googleMapsApiKey.isNotBlank()) "Google Maps API 就绪 · 全球覆盖" else "Google Maps 模式 · 请在设置填入 Key"
             statusText.text = "🌍 Google Maps 全球模式"
             roadNameText.text = keyStatus
             copilot.updateLocation("Google Maps 全球定位模式")
         } else {
+            // Completely stop native GPS and Google Map updates
+            systemGps.stop()
+            googleMapEngine.stopNavigation()
             googleMapView.visibility = View.GONE
+
+            // Resume AMap
             naviView.visibility = View.VISIBLE
+            naviView.onResume()
+            enRoute.start(
+                onAreaChanged = {},
+                onFirstFix = { handleLocationFix(it) },
+                onLocation = { loc -> updateLocationMarker(loc) },
+            )
+
             if (statusText.text.contains("Google Maps")) {
                 statusText.setText(R.string.nav_standby_distance_time)
                 roadNameText.setText(R.string.nav_standby_road)
@@ -1089,6 +1114,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         destroyed = true
+        systemGps.stop()
+        googleMapEngine.onDestroy()
         naviView.onDestroy()
         mainHandler.removeCallbacksAndMessages(null)
         navigationProvider.removeListener(naviListener)
