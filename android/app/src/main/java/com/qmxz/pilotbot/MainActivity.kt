@@ -48,6 +48,7 @@ import com.qmxz.pilotbot.navi.RoutePlan
 import com.qmxz.pilotbot.search.PlaceResult
 import com.qmxz.pilotbot.search.PlaceSearch
 import com.qmxz.pilotbot.tts.AndroidTextToSpeech
+import com.qmxz.pilotbot.tts.SmartTextToSpeech
 import com.qmxz.pilotbot.voice.VoiceController
 import com.qmxz.pilotbot.voice.intent.VoiceIntent
 import com.qmxz.pilotbot.voice.intent.VoiceIntentParser
@@ -83,7 +84,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var navigationProvider: AmapNavigationProvider
     private lateinit var copilot: CopilotEngine
     private lateinit var voiceController: VoiceController
-    private lateinit var tts: AndroidTextToSpeech
+    private lateinit var tts: SmartTextToSpeech
     private lateinit var smartStt: SmartSpeechToText
     private lateinit var enRoute: AmapEnRouteDataSource
     private lateinit var placeSearch: PlaceSearch
@@ -222,7 +223,7 @@ class MainActivity : AppCompatActivity() {
 
         updateBubbleTag()
 
-        tts = AndroidTextToSpeech(applicationContext).apply {
+        tts = SmartTextToSpeech(applicationContext, appConfig).apply {
             onStatusChanged = {
                 renderOnMain { refreshVoiceStatus() }
             }

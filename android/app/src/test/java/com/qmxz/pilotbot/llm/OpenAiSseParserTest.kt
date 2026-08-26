@@ -40,4 +40,18 @@ class OpenAiSseParserTest {
     fun testParseMalformedJson() {
         assertNull(parseSseDelta("data: {invalid json}"))
     }
+
+    @Test
+    fun testParseNullContentDelta() {
+        val line = """data: {"choices":[{"delta":{"role":"assistant","content":null},"index":0}]}"""
+        val delta = parseSseDelta(line)
+        assertNull("delta.content should be null when JSON content is null", delta?.content)
+    }
+
+    @Test
+    fun testParseReasoningChunkDelta() {
+        val line = """data: {"choices":[{"delta":{"reasoning_content":"思考中..."},"index":0}]}"""
+        val delta = parseSseDelta(line)
+        assertNull("delta.content should be null for reasoning only chunks", delta?.content)
+    }
 }

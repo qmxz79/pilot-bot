@@ -131,9 +131,16 @@ fun parseSseDelta(line: String): SseDelta? {
     if (choices.length() == 0) return null
     val first = choices.getJSONObject(0)
     val delta = first.optJSONObject("delta") ?: return null
+
+    val rawContent = if (delta.isNull("content")) null else delta.opt("content")?.toString()
+    val content = rawContent?.takeIf { it.isNotEmpty() && it != "null" }
+
+    val rawFinish = if (first.isNull("finish_reason")) null else first.opt("finish_reason")?.toString()
+    val finishReason = rawFinish?.takeIf { it.isNotEmpty() && it != "null" }
+
     return SseDelta(
-        content = delta.optString("content").takeIf { it.isNotEmpty() },
-        finishReason = first.optString("finish_reason").takeIf { it.isNotEmpty() },
+        content = content,
+        finishReason = finishReason,
     )
 }
 
