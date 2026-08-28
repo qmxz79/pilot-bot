@@ -73,4 +73,13 @@ class PersonaTest {
         val parsed = Persona.fromJson("not-a-json")
         assertNull(parsed)
     }
+
+    @Test
+    fun testHumorousPersonaInPersonaStore() {
+        val humorous = PersonaStore.find("humorous")
+        assertNotNull(humorous)
+        assertEquals("逗趣老哥", humorous?.name)
+        assertTrue(humorous?.tone?.contains("幽默风趣") == true)
+        assertTrue(humorous?.buildSystemPrompt()?.contains("逗趣老哥") == true)
+    }
 }

@@ -47,6 +47,16 @@ class VoiceController(
     val isTurnTakingActive: Boolean
         get() = System.currentTimeMillis() < turnTakingDeadline
 
+    /** Automatically activates hands-free listening when in Continuous / WakeWord / FullDuplex modes. */
+    fun startHandsFreeIfConfigured() {
+        if (config.conversationMode != ConversationMode.PUSH_TO_TALK) {
+            handsFreeEnabled = true
+            resumeListening()
+        } else {
+            stopListening()
+        }
+    }
+
     /** Mic button: one-shot in push-to-talk, a hands-free on/off toggle in continuous/duplex modes. */
     fun toggleMic() {
         when (config.conversationMode) {
@@ -154,9 +164,9 @@ class VoiceController(
         listening = true
         onListeningState(true)
         val statusText = when (config.conversationMode) {
-            ConversationMode.FULL_DUPLEX -> "👂 全双工实时对话已开启..."
-            ConversationMode.WAKE_WORD -> "👂 唤醒词对话已开启..."
-            ConversationMode.CONTINUOUS -> "👂 连续对话已开启..."
+            ConversationMode.FULL_DUPLEX -> "⚡ 全双工实时倾听中 (随时说话/随时打断)..."
+            ConversationMode.WAKE_WORD -> "🎙️ 唤醒模式倾听中 (呼唤「${config.wakeWord.ifBlank { "小伴" }}」)..."
+            ConversationMode.CONTINUOUS -> "👂 连续对话倾听中 (免唤醒)..."
             ConversationMode.PUSH_TO_TALK -> "👂 正在倾听..."
         }
         onStatusUpdate(statusText)
@@ -197,21 +207,29 @@ class VoiceController(
             return
         }
 
-        val wakeWord = if (config.conversationMode == ConversationMode.WAKE_WORD) config.wakeWord.trim() else null
+        val targetWake = if (config.conversationMode == ConversationMode.WAKE_WORD) {
+            config.wakeWord.trim().ifBlank { "小伴" }
+        } else null
 
-        val message = if (config.conversationMode == ConversationMode.WAKE_WORD && !wakeWord.isNullOrEmpty()) {
-            if (trimmed.startsWith(wakeWord, ignoreCase = true)) {
-                // Utterance started with wake word
-                trimmed.substring(wakeWord.length).trim()
+        val message = if (config.conversationMode == ConversationMode.WAKE_WORD && !targetWake.isNullOrEmpty()) {
+            val clean = trimmed.replace(Regex("^[，,：:!！?？~\\s]+"), "")
+            val wakePatterns = listOf(
+                targetWake,
+                "你好$targetWake",
+                "嗨$targetWake",
+                "呼叫$targetWake",
+                "${targetWake}${targetWake}",
+            )
+            val matched = wakePatterns.firstOrNull { clean.startsWith(it, ignoreCase = true) }
+            if (matched != null) {
+                clean.substring(matched.length).replace(Regex("^[，,：:!！?？~\\s]+"), "").trim().ifBlank { "你好！" }
             } else if (isTurnTakingActive) {
                 // In active 10s turn-taking window: exempt from wake word requirement
-                trimmed
+                clean
             } else {
                 // Outside active turn-taking window without wake word -> ignore
                 return
             }
-        } else if (!wakeWord.isNullOrEmpty() && trimmed.startsWith(wakeWord, ignoreCase = true)) {
-            trimmed.substring(wakeWord.length).trim()
         } else {
             trimmed
         }

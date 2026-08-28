@@ -36,12 +36,13 @@ class AudioRecorder {
      * Records audio from the microphone until silence is detected, [stop] is called, or timeout.
      * Invokes [onChunk] on each read PCM chunk, [onRmsDb] with calculated volume in dB,
      * and [onSpeechStart] when voice onset activity is detected.
-     * Returns standard WAV encoded audio bytes.
+     * Returns standard WAV encoded audio bytes (or empty byte array if silence timeout reached).
      */
     @SuppressLint("MissingPermission")
     suspend fun recordWav(
         onRmsDb: ((Float) -> Unit)? = null,
         maxDurationMs: Long = 15000L,
+        silenceTimeoutMs: Long = 0L,
         onSpeechStart: (() -> Unit)? = null,
         onChunk: ((ByteArray) -> Unit)? = null,
     ): ByteArray = withContext(Dispatchers.IO) {
@@ -101,7 +102,7 @@ class AudioRecorder {
                     onRmsDb?.invoke(db)
 
                     // Voice Activity Detection (VAD) heuristic
-                    if (db > -48f) {
+                    if (db > -45f) {
                         if (!speechStarted) {
                             speechStarted = true
                             onSpeechStart?.invoke()
@@ -110,10 +111,13 @@ class AudioRecorder {
                     } else if (speechStarted) {
                         if (silenceStartTime == 0L) {
                             silenceStartTime = System.currentTimeMillis()
-                        } else if (System.currentTimeMillis() - silenceStartTime > 1600L && totalRead > 16000 * 2) {
-                            // 1.6s of silence after speech detected -> auto stop
+                        } else if (System.currentTimeMillis() - silenceStartTime > 1100L && totalRead > 16000 * 2) {
+                            // 1.1s of silence after speech detected -> auto stop
                             break
                         }
+                    } else if (silenceTimeoutMs > 0L && (System.currentTimeMillis() - startTime) > silenceTimeoutMs) {
+                        // In continuous mode, no speech detected after silenceTimeoutMs -> break early without wasting cloud ASR
+                        break
                     }
                 } else if (shortsRead < 0) {
                     break
@@ -131,6 +135,10 @@ class AudioRecorder {
                 record.release()
             }
             audioRecord = null
+        }
+
+        if (!speechStarted && silenceTimeoutMs > 0L) {
+            return@withContext ByteArray(0)
         }
 
         val pcmBytes = pcmOut.toByteArray()

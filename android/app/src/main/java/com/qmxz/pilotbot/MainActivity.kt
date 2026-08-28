@@ -354,6 +354,7 @@ class MainActivity : AppCompatActivity() {
         }
         updateBubbleTag()
         refreshVoiceStatus()
+        voiceController.startHandsFreeIfConfigured()
         updateMicButtonAppearance()
         mountMapEngine()
     }
@@ -429,29 +430,59 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateMicButtonAppearance(listening: Boolean = voiceController.isListening) {
-        if (appConfig.conversationMode == ConversationMode.FULL_DUPLEX) {
-            if (listening) {
-                micButton.text = getString(R.string.mic_button_full_duplex_active)
-                micButton.setBackgroundColor(android.graphics.Color.parseColor("#10B981"))
-                floatingMicButton.text = "⚡ 全双工 (倾听中)"
-                floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#10B981"))
-            } else {
-                micButton.text = getString(R.string.mic_button_full_duplex)
-                micButton.setBackgroundColor(android.graphics.Color.parseColor("#6366F1"))
-                floatingMicButton.text = getString(R.string.mic_button_full_duplex)
-                floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#6366F1"))
+        when (appConfig.conversationMode) {
+            ConversationMode.FULL_DUPLEX -> {
+                if (listening) {
+                    micButton.text = "⚡ 全双工 (持续倾听中 · 随时说话/打断)"
+                    micButton.setBackgroundColor(android.graphics.Color.parseColor("#10B981"))
+                    floatingMicButton.text = "⚡ 全双工 (倾听中)"
+                    floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#10B981"))
+                } else {
+                    micButton.text = "⚡ 全双工 (点击开启倾听)"
+                    micButton.setBackgroundColor(android.graphics.Color.parseColor("#6366F1"))
+                    floatingMicButton.text = "⚡ 全双工 (点击开启)"
+                    floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#6366F1"))
+                }
             }
-        } else {
-            if (listening) {
-                micButton.text = "🔴 正在倾听 (点击发送)"
-                micButton.setBackgroundColor(android.graphics.Color.parseColor("#EF4444"))
-                floatingMicButton.text = "🔴 正在倾听..."
-                floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#EF4444"))
-            } else {
-                micButton.text = getString(R.string.mic_button)
-                micButton.setBackgroundColor(android.graphics.Color.parseColor("#6366F1"))
-                floatingMicButton.text = "🎙️ 按键说话"
-                floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#6366F1"))
+            ConversationMode.CONTINUOUS -> {
+                if (listening) {
+                    micButton.text = "👂 连续对话 (免唤醒倾听中)"
+                    micButton.setBackgroundColor(android.graphics.Color.parseColor("#10B981"))
+                    floatingMicButton.text = "👂 连续对话 (倾听中)"
+                    floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#10B981"))
+                } else {
+                    micButton.text = "👂 连续对话 (点击开启)"
+                    micButton.setBackgroundColor(android.graphics.Color.parseColor("#6366F1"))
+                    floatingMicButton.text = "👂 连续对话 (点击开启)"
+                    floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#6366F1"))
+                }
+            }
+            ConversationMode.WAKE_WORD -> {
+                val wake = appConfig.wakeWord.ifBlank { "小伴" }
+                if (listening) {
+                    micButton.text = "🎙️ 唤醒模式 (呼唤「$wake」)"
+                    micButton.setBackgroundColor(android.graphics.Color.parseColor("#2563EB"))
+                    floatingMicButton.text = "🎙️ 呼唤「$wake」"
+                    floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#2563EB"))
+                } else {
+                    micButton.text = "🎙️ 唤醒模式 (点击开启)"
+                    micButton.setBackgroundColor(android.graphics.Color.parseColor("#6366F1"))
+                    floatingMicButton.text = "🎙️ 唤醒模式 (点击开启)"
+                    floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#6366F1"))
+                }
+            }
+            ConversationMode.PUSH_TO_TALK -> {
+                if (listening) {
+                    micButton.text = "🔴 正在倾听 (点击发送)"
+                    micButton.setBackgroundColor(android.graphics.Color.parseColor("#EF4444"))
+                    floatingMicButton.text = "🔴 正在倾听..."
+                    floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#EF4444"))
+                } else {
+                    micButton.text = "🎙️ 按键说话 (点一下说一句)"
+                    micButton.setBackgroundColor(android.graphics.Color.parseColor("#6366F1"))
+                    floatingMicButton.text = "🎙️ 按键说话"
+                    floatingMicButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.parseColor("#6366F1"))
+                }
             }
         }
     }

@@ -72,15 +72,18 @@ class SmartSpeechToText(
                 if (apiKey.isNotBlank()) {
                     try {
                         val wavBytes = audioRecorder.recordWav(
-                            maxDurationMs = 10000L,
+                            maxDurationMs = 12000L,
+                            silenceTimeoutMs = 3000L,
                             onSpeechStart = onSpeechStart,
                         )
-                        val text = cloudStt.transcribe(wavBytes)
-                        if (text.isNotBlank()) {
-                            launch(Dispatchers.Main) { onResult(text) }
+                        if (wavBytes.isNotEmpty()) {
+                            val text = cloudStt.transcribe(wavBytes)
+                            if (text.isNotBlank()) {
+                                launch(Dispatchers.Main) { onResult(text) }
+                            }
                         }
                     } catch (_: Exception) {
-                        delay(500L)
+                        delay(300L)
                     }
                 } else if (isSystemAsrAvailable) {
                     launch(Dispatchers.Main) {

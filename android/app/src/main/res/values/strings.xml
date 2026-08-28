@@ -74,6 +74,7 @@
     <string name="settings_persona_preset_label">预设</string>
     <string name="preset_custom">自定义</string>
     <string name="preset_cheerful">活泼·小伴</string>
+    <string name="preset_humorous">幽默·逗趣</string>
     <string name="preset_calm">沉稳·老哥</string>
     <string name="preset_sarcastic">毒舌·损友</string>
     <string name="settings_name_hint">名字</string>

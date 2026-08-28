@@ -228,6 +228,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun presetLabel(id: String): String = when (id) {
         PersonaStore.CUSTOM_ID -> getString(R.string.preset_custom)
         "cheerful" -> getString(R.string.preset_cheerful)
+        "humorous" -> getString(R.string.preset_humorous)
         "calm" -> getString(R.string.preset_calm)
         "sarcastic" -> getString(R.string.preset_sarcastic)
         else -> getString(R.string.preset_custom)
