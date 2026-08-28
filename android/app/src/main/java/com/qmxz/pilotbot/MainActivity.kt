@@ -62,6 +62,10 @@ import com.qmxz.pilotbot.search.PlaceResult
 import com.qmxz.pilotbot.search.PlaceSearch
 import com.qmxz.pilotbot.tts.AndroidTextToSpeech
 import com.qmxz.pilotbot.tts.SmartTextToSpeech
+import com.qmxz.pilotbot.avatar.lipsync.LipSyncEngine
+import com.qmxz.pilotbot.avatar.state.AvatarGender
+import com.qmxz.pilotbot.avatar.state.AvatarState
+import com.qmxz.pilotbot.avatar.view.AvatarView
 import com.qmxz.pilotbot.voice.VoiceController
 import com.qmxz.pilotbot.voice.intent.VoiceIntent
 import com.qmxz.pilotbot.voice.intent.VoiceIntentParser
@@ -70,28 +74,34 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
 
 /**
- * Driver Mode UI & Automotive Experience Lead:
- * Fullscreen AMap navigation + Driver big-card view + Copilot companion bubble + Full Voice Intent Dispatcher.
+ * Driver-focused landscape/portrait copilot screen with dual map engines (AMap & Google Maps).
+ * Integrates real-time 2.5D animated Avatar with lip-sync, memory management, and multi-turn voice.
  */
 class MainActivity : AppCompatActivity() {
+
+    private lateinit var searchInput: EditText
+    private lateinit var searchButton: MaterialButton
+    private lateinit var settingsButton: MaterialButton
+    private lateinit var searchResults: View
+    private lateinit var searchResultList: LinearLayout
+
     private lateinit var statusText: TextView
     private lateinit var roadNameText: TextView
     private lateinit var voiceStatus: TextView
     private lateinit var copilotBubbleTag: TextView
     private lateinit var copilotText: TextView
+    private lateinit var copilotAvatarView: AvatarView
     private lateinit var transcriptText: TextView
     private lateinit var transcriptScroll: ScrollView
     private lateinit var chatInput: EditText
     private lateinit var micButton: MaterialButton
     private lateinit var startButton: MaterialButton
     private lateinit var stopButton: MaterialButton
-    private lateinit var searchInput: EditText
-    private lateinit var searchResults: View
-    private lateinit var searchResultList: LinearLayout
     private lateinit var expandButton: MaterialButton
     private lateinit var panelBody: LinearLayout
     private lateinit var topBar: View
     private lateinit var bottomDriverCard: View
+
     private lateinit var mapFullscreenHint: View
     private lateinit var floatingMicButton: ExtendedFloatingActionButton
     private lateinit var naviView: AMapNaviView
@@ -108,6 +118,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var systemGps: SystemGpsDataSource
     private lateinit var placeSearch: PlaceSearch
     private lateinit var googleMapEngine: GoogleMapEngine
+    private val lipSyncEngine = LipSyncEngine()
 
     private var aMap: AMap? = null
     private var googleRoutePolyline: Polyline? = null
@@ -273,11 +284,12 @@ class MainActivity : AppCompatActivity() {
                 false
             }
         }
-        findViewById<View>(R.id.copilotBubble).setOnClickListener {
-            val endpoint = appConfig.endpoint
-            if (endpoint.baseUrl.isBlank() || endpoint.apiKey.isBlank() || endpoint.model.isBlank()) {
-                openSettings()
-            }
+        copilotAvatarView = findViewById(R.id.copilotAvatarView)
+        copilotAvatarView.attachLipSyncEngine(lipSyncEngine)
+        copilotAvatarView.avatarGender = appConfig.avatarGender
+        copilotAvatarView.setOnInteractiveClickListener {
+            val name = if (appConfig.avatarGender == AvatarGender.FEMALE) "心怡" else "修然"
+            copilot.speakDirect("嗨！我是副驾$name，随时听你吩咐哦~")
         }
 
         updateBubbleTag()
@@ -300,8 +312,16 @@ class MainActivity : AppCompatActivity() {
                 appendTranscript(getString(R.string.transcript_copilot), text)
                 voiceController.onCopilotText(text)
             },
-            onSpeakingStart = { voiceController.onCopilotSpeakingStart() },
-            onSpeakingEnd = { voiceController.onCopilotSpeakingEnd() },
+            onSpeakingStart = {
+                voiceController.onCopilotSpeakingStart()
+                renderOnMain { copilotAvatarView.state = AvatarState.SPEAKING }
+                lipSyncEngine.startSpeaking()
+            },
+            onSpeakingEnd = {
+                voiceController.onCopilotSpeakingEnd()
+                renderOnMain { copilotAvatarView.state = AvatarState.IDLE }
+                lipSyncEngine.stopSpeaking()
+            },
         )
 
         voiceController = VoiceController(
@@ -309,7 +329,14 @@ class MainActivity : AppCompatActivity() {
             speechToText = smartStt,
             copilot = copilot,
             onListeningState = { listening ->
-                renderOnMain { updateMicButtonAppearance(listening) }
+                renderOnMain {
+                    updateMicButtonAppearance(listening)
+                    if (listening) {
+                        copilotAvatarView.state = AvatarState.LISTENING
+                    } else if (copilotAvatarView.state == AvatarState.LISTENING) {
+                        copilotAvatarView.state = AvatarState.IDLE
+                    }
+                }
             },
             onStatusUpdate = { status ->
                 renderOnMain {
@@ -354,6 +381,8 @@ class MainActivity : AppCompatActivity() {
         }
         updateBubbleTag()
         refreshVoiceStatus()
+        copilotAvatarView.avatarGender = appConfig.avatarGender
+        copilotAvatarView.state = AvatarState.IDLE
         voiceController.startHandsFreeIfConfigured()
         updateMicButtonAppearance()
         mountMapEngine()
@@ -505,8 +534,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateBubbleTag() {
-        val personaName = appConfig.currentPersona().name.ifBlank { "小伴" }
-        copilotBubbleTag.text = "🤖 副驾「$personaName」说："
+        val defaultName = if (appConfig.avatarGender == AvatarGender.FEMALE) "心怡" else "修然"
+        val personaName = appConfig.currentPersona().name.ifBlank { defaultName }
+        val icon = if (appConfig.avatarGender == AvatarGender.FEMALE) "👩" else "👨"
+        copilotBubbleTag.text = "$icon 副驾「$personaName」说："
     }
 
     private fun refreshVoiceStatus() {

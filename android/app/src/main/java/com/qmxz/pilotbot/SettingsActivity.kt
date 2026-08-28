@@ -8,6 +8,7 @@ import android.speech.tts.TextToSpeech
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.Spinner
 import android.widget.Toast
@@ -27,6 +28,10 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var baseUrl: TextInputEditText
     private lateinit var apiKey: TextInputEditText
     private lateinit var model: TextInputEditText
+    private lateinit var avatarPreview: com.qmxz.pilotbot.avatar.view.AvatarView
+    private lateinit var avatarRadioGroup: RadioGroup
+    private lateinit var avatarFemaleRadio: RadioButton
+    private lateinit var avatarMaleRadio: RadioButton
     private lateinit var personaSpinner: Spinner
     private lateinit var name: TextInputEditText
     private lateinit var tone: TextInputEditText
@@ -65,6 +70,10 @@ class SettingsActivity : AppCompatActivity() {
         val config = AppConfig(applicationContext)
         findViewById<View>(R.id.asrWarning).visibility =
             if (config.endpoint.apiKey.isNotBlank() || SpeechRecognizer.isRecognitionAvailable(this)) View.GONE else View.VISIBLE
+        avatarPreview = findViewById(R.id.settingsAvatarPreview)
+        avatarRadioGroup = findViewById(R.id.avatarRadioGroup)
+        avatarFemaleRadio = findViewById(R.id.avatarFemaleRadio)
+        avatarMaleRadio = findViewById(R.id.avatarMaleRadio)
         baseUrl = findViewById(R.id.baseUrlInput)
         apiKey = findViewById(R.id.apiKeyInput)
         model = findViewById(R.id.modelInput)
@@ -78,6 +87,22 @@ class SettingsActivity : AppCompatActivity() {
         mapProviderAmap = findViewById(R.id.mapProviderAmap)
         mapProviderGoogle = findViewById(R.id.mapProviderGoogle)
         googleMapsApiKey = findViewById(R.id.googleMapsApiKeyInput)
+
+        // Setup Avatar Selection & Live Preview
+        avatarPreview.avatarGender = config.avatarGender
+        if (config.avatarGender == com.qmxz.pilotbot.avatar.state.AvatarGender.MALE) {
+            avatarMaleRadio.isChecked = true
+        } else {
+            avatarFemaleRadio.isChecked = true
+        }
+        avatarRadioGroup.setOnCheckedChangeListener { _, checkedId ->
+            val gender = if (checkedId == R.id.avatarMaleRadio) {
+                com.qmxz.pilotbot.avatar.state.AvatarGender.MALE
+            } else {
+                com.qmxz.pilotbot.avatar.state.AvatarGender.FEMALE
+            }
+            avatarPreview.avatarGender = gender
+        }
 
         config.endpoint.let {
             baseUrl.setText(it.baseUrl)
@@ -178,7 +203,13 @@ class SettingsActivity : AppCompatActivity() {
                 R.id.mapProviderGoogle -> MapProvider.GOOGLE
                 else -> MapProvider.AMAP
             }
+            config.avatarGender = if (avatarRadioGroup.checkedRadioButtonId == R.id.avatarMaleRadio) {
+                com.qmxz.pilotbot.avatar.state.AvatarGender.MALE
+            } else {
+                com.qmxz.pilotbot.avatar.state.AvatarGender.FEMALE
+            }
             config.googleMapsApiKey = googleMapsApiKey.text?.toString()?.trim().orEmpty()
+            Toast.makeText(this, "设置已保存", Toast.LENGTH_SHORT).show()
             setResult(RESULT_OK)
             finish()
         }

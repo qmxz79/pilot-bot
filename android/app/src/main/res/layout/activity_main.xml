@@ -299,38 +299,53 @@
                 android:textColor="#475569" />
         </LinearLayout>
 
-        <!-- 副驾老朋友说话气泡 -->
+        <!-- 副驾老朋友说话气泡 + 动态数字人形象 -->
         <LinearLayout
             android:id="@+id/copilotBubble"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:background="@drawable/bg_speech_bubble"
-            android:orientation="vertical"
-            android:paddingHorizontal="12dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="10dp"
             android:paddingVertical="8dp">
 
-            <TextView
-                android:id="@+id/copilotBubbleTag"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="🤖 副驾老朋友说："
-                android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
-                android:textColor="#2563EB"
-                android:textStyle="bold" />
+            <!-- 动态高颜值虚拟副驾人偶 -->
+            <com.qmxz.pilotbot.avatar.view.AvatarView
+                android:id="@+id/copilotAvatarView"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_marginEnd="10dp" />
 
-            <TextView
-                android:id="@+id/copilotText"
-                android:layout_width="match_parent"
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:lineSpacingMultiplier="1.15"
-                android:maxLines="3"
-                android:text="@string/copilot_default"
-                android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
-                android:textColor="#0F172A"
-                android:textIsSelectable="true"
-                android:textSize="15sp" />
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/copilotBubbleTag"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🤖 副驾老朋友说："
+                    android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+                    android:textColor="#2563EB"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/copilotText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:lineSpacingMultiplier="1.15"
+                    android:maxLines="3"
+                    android:text="@string/copilot_default"
+                    android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                    android:textColor="#0F172A"
+                    android:textIsSelectable="true"
+                    android:textSize="15sp" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- 主操作栏：按键说话 + 启停导航 + 展开打字/详情按钮 -->

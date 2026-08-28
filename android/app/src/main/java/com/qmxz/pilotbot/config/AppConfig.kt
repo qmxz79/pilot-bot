@@ -84,6 +84,14 @@ class AppConfig(private val prefs: SharedPreferences) {
         get() = prefs.getString(KEY_GOOGLE_MAPS_API_KEY, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_GOOGLE_MAPS_API_KEY, value).apply()
 
+    var avatarGender: com.qmxz.pilotbot.avatar.state.AvatarGender
+        get() = runCatching {
+            com.qmxz.pilotbot.avatar.state.AvatarGender.valueOf(
+                prefs.getString(KEY_AVATAR_GENDER, com.qmxz.pilotbot.avatar.state.AvatarGender.FEMALE.name).orEmpty()
+            )
+        }.getOrDefault(com.qmxz.pilotbot.avatar.state.AvatarGender.FEMALE)
+        set(value) = prefs.edit().putString(KEY_AVATAR_GENDER, value.name).apply()
+
     /** True only on the very first launch; flips the flag so it cannot fire twice. */
     fun consumeFirstLaunch(): Boolean {
         val first = prefs.getBoolean(KEY_FIRST_LAUNCH, true)
@@ -107,6 +115,7 @@ class AppConfig(private val prefs: SharedPreferences) {
         const val KEY_FIRST_LAUNCH = "first_launch"
         const val KEY_MAP_PROVIDER = "map_provider"
         const val KEY_GOOGLE_MAPS_API_KEY = "google_maps_api_key"
+        const val KEY_AVATAR_GENDER = "avatar_gender"
         const val DEFAULT_NAME = "小伴"
         const val DEFAULT_TONE = "轻松、活泼、像朋友"
         const val DEFAULT_WAKE_WORD = "小伴"
