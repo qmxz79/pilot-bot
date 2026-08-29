@@ -63,6 +63,7 @@ class AvatarView @JvmOverloads constructor(
         settings.javaScriptEnabled = true
         settings.allowFileAccess = true
         settings.domStorageEnabled = true
+        settings.mediaPlaybackRequiresUserGesture = false
         settings.cacheMode = WebSettings.LOAD_NO_CACHE
 
         webView.addJavascriptInterface(AvatarJsBridge(), "AndroidBridge")
