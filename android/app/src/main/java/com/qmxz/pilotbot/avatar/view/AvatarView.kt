@@ -24,8 +24,7 @@ class AvatarView @JvmOverloads constructor(
 
     val stateMachine = AvatarStateMachine()
 
-    private val femaleRenderer = FemaleAvatarRenderer()
-    private val maleRenderer = MaleAvatarRenderer()
+    private val realisticRenderer = RealisticAvatarRenderer(context)
     private val boundsRect = RectF()
 
     private var activeLipSyncEngine: LipSyncEngine? = null
@@ -116,8 +115,6 @@ class AvatarView @JvmOverloads constructor(
         boundsRect.set(0f, 0f, width.toFloat(), height.toFloat())
 
         val frameData = stateMachine.updateFrame()
-        val renderer = if (avatarGender == AvatarGender.FEMALE) femaleRenderer else maleRenderer
-
-        renderer.draw(canvas, boundsRect, frameData, currentLipState, currentLipOpenness)
+        realisticRenderer.drawWithGender(canvas, boundsRect, frameData, currentLipState, currentLipOpenness, avatarGender)
     }
 }
