@@ -54,6 +54,7 @@ class AvatarView @JvmOverloads constructor(
             stateMachine.triggerInteractiveReaction()
             onInteractiveClickListener?.invoke()
         }
+        startAnimationLoop()
     }
 
     fun setOnInteractiveClickListener(listener: () -> Unit) {
@@ -82,18 +83,24 @@ class AvatarView @JvmOverloads constructor(
         activeLipSyncEngine?.removeListener(this)
     }
 
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        super.onWindowFocusChanged(hasWindowFocus)
+        if (hasWindowFocus) {
+            startAnimationLoop()
+        }
+    }
+
     override fun onVisibilityChanged(changedView: View, visibility: Int) {
         super.onVisibilityChanged(changedView, visibility)
         if (visibility == VISIBLE) {
             startAnimationLoop()
-        } else {
-            stopAnimationLoop()
         }
     }
 
     private fun startAnimationLoop() {
         if (!isRunning) {
             isRunning = true
+            Choreographer.getInstance().removeFrameCallback(this)
             Choreographer.getInstance().postFrameCallback(this)
         }
     }
@@ -104,7 +111,7 @@ class AvatarView @JvmOverloads constructor(
     }
 
     override fun doFrame(frameTimeNanos: Long) {
-        if (isRunning && isShown) {
+        if (isRunning) {
             invalidate()
             Choreographer.getInstance().postFrameCallback(this)
         }

@@ -75,7 +75,7 @@ class AvatarStateMachine {
         }
 
         if (isBlinking) {
-            val blinkDuration = 180L
+            val blinkDuration = 240L
             val elapsed = (currentTimeMs - nextBlinkTime).coerceAtLeast(0L)
             if (elapsed < blinkDuration / 2) {
                 blinkProgress = (elapsed.toFloat() / (blinkDuration / 2)).coerceIn(0f, 1f)
@@ -112,11 +112,11 @@ class AvatarStateMachine {
 
         // Head tilt and body lean based on state
         val bodyTilt = when (currentState) {
-            AvatarState.LISTENING -> -3.5f // Leaning towards driver
-            AvatarState.THINKING -> 2.5f
-            AvatarState.SPEAKING -> sin((currentTimeMs % 1200L) / 1200.0 * 2.0 * Math.PI).toFloat() * 1.5f
+            AvatarState.LISTENING -> -4.0f // Leaning towards driver
+            AvatarState.THINKING -> 3.5f
+            AvatarState.SPEAKING -> sin((currentTimeMs % 800L) / 800.0 * 2.0 * Math.PI).toFloat() * 2.5f // Energetic speaking head nod
             AvatarState.ALERT -> 0.0f
-            AvatarState.IDLE -> sin((currentTimeMs % 4000L) / 4000.0 * 2.0 * Math.PI).toFloat() * 0.8f
+            AvatarState.IDLE -> sin((currentTimeMs % 3200L) / 3200.0 * 2.0 * Math.PI).toFloat() * 1.5f
         }
 
         return AvatarFrameData(
@@ -130,9 +130,9 @@ class AvatarStateMachine {
         )
     }
 
-    private fun randomBlinkInterval(): Long = 2800L + random.nextInt(3200)
+    private fun randomBlinkInterval(): Long = 1600L + random.nextInt(2400)
 
-    private fun randomGlanceInterval(): Long = 3500L + random.nextInt(4000)
+    private fun randomGlanceInterval(): Long = 3000L + random.nextInt(3500)
 }
 
 data class AvatarFrameData(

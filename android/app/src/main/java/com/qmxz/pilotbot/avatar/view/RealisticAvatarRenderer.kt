@@ -7,8 +7,6 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
 import android.graphics.RadialGradient
 import android.graphics.Rect
 import android.graphics.RectF
@@ -20,18 +18,28 @@ import com.qmxz.pilotbot.avatar.state.AvatarGender
 import com.qmxz.pilotbot.avatar.state.AvatarState
 
 /**
- * Photorealistic 2.5D Digital Human Renderer.
- * Combines high-resolution real human portrait photography with 60FPS dynamic
- * breathing, organic eyelid blinking, and real-time audio-driven lip-sync mouth morphing.
+ * High-fidelity 60FPS Photorealistic Digital Human Renderer.
+ * Utilizes pre-aligned photographic frame sprites (idle, blink, wink, speak_open, speak_wide)
+ * combined with continuous sinusoidal breathing, speech head-nodding, state-based leaning,
+ * and audio-driven lip-sync frame interpolation.
  */
 class RealisticAvatarRenderer(private val context: Context) : AvatarRenderer {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val clipPath = Path()
-    private val mouthPath = Path()
-    private val eyelidPath = Path()
 
-    private var femaleBitmap: Bitmap? = null
-    private var maleBitmap: Bitmap? = null
+    // Female photographic frame assets
+    private var femaleIdle: Bitmap? = null
+    private var femaleBlink: Bitmap? = null
+    private var femaleWink: Bitmap? = null
+    private var femaleSpeakOpen: Bitmap? = null
+    private var femaleSpeakWide: Bitmap? = null
+
+    // Male photographic frame assets
+    private var maleIdle: Bitmap? = null
+    private var maleBlink: Bitmap? = null
+    private var maleWink: Bitmap? = null
+    private var maleSpeakOpen: Bitmap? = null
+    private var maleSpeakWide: Bitmap? = null
 
     private val srcRect = Rect()
     private val dstRect = RectF()
@@ -45,8 +53,18 @@ class RealisticAvatarRenderer(private val context: Context) : AvatarRenderer {
             val opts = BitmapFactory.Options().apply {
                 inPreferredConfig = Bitmap.Config.ARGB_8888
             }
-            femaleBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.avatar_female_real, opts)
-            maleBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.avatar_male_real, opts)
+            val res = context.resources
+            femaleIdle = BitmapFactory.decodeResource(res, R.drawable.female_real_idle, opts)
+            femaleBlink = BitmapFactory.decodeResource(res, R.drawable.female_real_blink, opts)
+            femaleWink = BitmapFactory.decodeResource(res, R.drawable.female_real_wink, opts)
+            femaleSpeakOpen = BitmapFactory.decodeResource(res, R.drawable.female_real_speak_open, opts)
+            femaleSpeakWide = BitmapFactory.decodeResource(res, R.drawable.female_real_speak_wide, opts)
+
+            maleIdle = BitmapFactory.decodeResource(res, R.drawable.male_real_idle, opts)
+            maleBlink = BitmapFactory.decodeResource(res, R.drawable.male_real_blink, opts)
+            maleWink = BitmapFactory.decodeResource(res, R.drawable.male_real_wink, opts)
+            maleSpeakOpen = BitmapFactory.decodeResource(res, R.drawable.male_real_speak_open, opts)
+            maleSpeakWide = BitmapFactory.decodeResource(res, R.drawable.male_real_speak_wide, opts)
         }
     }
 
@@ -57,47 +75,7 @@ class RealisticAvatarRenderer(private val context: Context) : AvatarRenderer {
         lipState: LipState,
         lipOpenness: Float,
     ) {
-        val cx = bounds.centerX()
-        val cy = bounds.centerY()
-        val size = bounds.width().coerceAtMost(bounds.height())
-        val radius = (size / 2.0f) * 0.94f
-        val u = size / 100.0f
-
-        canvas.save()
-
-        // 1. Draw outer status breathing glow halo
-        drawStatusHalo(canvas, cx, cy, radius, frameData.state, frameData.breathingFactor)
-
-        // 2. Setup circular clipping mask for portrait
-        clipPath.reset()
-        clipPath.addCircle(cx, cy, radius, Path.Direction.CW)
-        canvas.clipPath(clipPath)
-
-        // 3. Subtle physical breathing & head tilt transformation
-        val breathScale = 1.0f + (frameData.breathingFactor - 0.5f) * 0.025f
-        val breathOffsetY = (frameData.breathingFactor - 0.5f) * 1.5f * u
-
-        canvas.save()
-        canvas.scale(breathScale, breathScale, cx, cy)
-        canvas.translate(0f, breathOffsetY)
-        canvas.rotate(frameData.bodyTiltDegrees * 0.7f, cx, cy + radius * 0.8f)
-
-        // 4. Draw base photorealistic human portrait
-        val currentGender = if (frameData.bodyTiltDegrees < -900f) AvatarGender.MALE else null // placeholder check
-        drawPortraitBitmap(canvas, cx, cy, radius, currentGender ?: AvatarGender.FEMALE)
-
-        // 5. Draw realistic organic blinking / winking eyelids over eyes
-        drawRealisticEyelids(canvas, cx, cy, u, frameData)
-
-        // 6. Draw real-time audio lip-sync mouth morphing
-        drawRealisticLipSync(canvas, cx, cy, u, lipState, lipOpenness, frameData.state)
-
-        canvas.restore()
-
-        // 7. Draw circular luxury border rim on top
-        drawBorderRim(canvas, cx, cy, radius, frameData.state)
-
-        canvas.restore()
+        drawWithGender(canvas, bounds, frameData, lipState, lipOpenness, AvatarGender.FEMALE)
     }
 
     fun drawWithGender(
@@ -111,47 +89,80 @@ class RealisticAvatarRenderer(private val context: Context) : AvatarRenderer {
         val cx = bounds.centerX()
         val cy = bounds.centerY()
         val size = bounds.width().coerceAtMost(bounds.height())
-        val radius = (size / 2.0f) * 0.94f
+        val radius = (size / 2.0f) * 0.92f
         val u = size / 100.0f
 
         canvas.save()
 
-        // 1. Draw outer status breathing glow halo
+        // 1. Draw outer dynamic breathing status glow halo
         drawStatusHalo(canvas, cx, cy, radius, frameData.state, frameData.breathingFactor)
 
-        // 2. Setup circular clipping mask
+        // 2. Setup circular clipping mask for portrait
         clipPath.reset()
         clipPath.addCircle(cx, cy, radius, Path.Direction.CW)
         canvas.clipPath(clipPath)
 
-        // 3. Subtle physical breathing & head tilt
-        val breathScale = 1.0f + (frameData.breathingFactor - 0.5f) * 0.025f
-        val breathOffsetY = (frameData.breathingFactor - 0.5f) * 1.5f * u
+        // 3. Clear, visible physical breathing & head nod/tilt transformation
+        val breathScale = 1.0f + (frameData.breathingFactor - 0.5f) * 0.045f // 4.5% visible breathing scale
+        val breathOffsetY = (frameData.breathingFactor - 0.5f) * 3.5f * u
 
         canvas.save()
         canvas.scale(breathScale, breathScale, cx, cy)
         canvas.translate(0f, breathOffsetY)
-        canvas.rotate(frameData.bodyTiltDegrees * 0.7f, cx, cy + radius * 0.8f)
+        canvas.rotate(frameData.bodyTiltDegrees, cx, cy + radius * 0.8f)
 
-        // 4. Draw base portrait bitmap
-        drawPortraitBitmap(canvas, cx, cy, radius, gender)
+        // 4. Select the appropriate photographic frame according to real-time state & lip sync
+        val activeBitmap = selectPhotorealBitmap(gender, frameData, lipState, lipOpenness)
 
-        // 5. Draw realistic blinking eyelids
-        drawRealisticEyelids(canvas, cx, cy, u, frameData)
-
-        // 6. Draw real-time audio lip-sync mouth morphing
-        drawRealisticLipSync(canvas, cx, cy, u, lipState, lipOpenness, frameData.state)
+        // 5. Draw active photorealistic human frame
+        drawBitmapFrame(canvas, cx, cy, radius, activeBitmap, gender)
 
         canvas.restore()
 
-        // 7. Draw circular border rim
+        // 6. Draw circular luxury border rim
         drawBorderRim(canvas, cx, cy, radius, frameData.state)
 
         canvas.restore()
     }
 
-    private fun drawPortraitBitmap(canvas: Canvas, cx: Float, cy: Float, radius: Float, gender: AvatarGender) {
-        val bmp = if (gender == AvatarGender.FEMALE) femaleBitmap else maleBitmap
+    private fun selectPhotorealBitmap(
+        gender: AvatarGender,
+        frameData: AvatarFrameData,
+        lipState: LipState,
+        lipOpenness: Float,
+    ): Bitmap? {
+        val isFemale = (gender == AvatarGender.FEMALE)
+
+        // Priority 1: Interactive wink on tap
+        if (frameData.isWinking) {
+            return if (isFemale) femaleWink ?: femaleIdle else maleWink ?: maleIdle
+        }
+
+        // Priority 2: Blinking (organic blink cycle every 2.5~5s)
+        if (frameData.blinkProgress > 0.35f) {
+            return if (isFemale) femaleBlink ?: femaleIdle else maleBlink ?: maleIdle
+        }
+
+        // Priority 3: Audio-Driven Real-time Lip-Sync Speaking
+        if (frameData.state == AvatarState.SPEAKING || lipOpenness > 0.08f) {
+            return when {
+                lipOpenness > 0.55f || lipState == LipState.WIDE_AO || lipState == LipState.FLAT_EI -> {
+                    if (isFemale) femaleSpeakWide ?: femaleSpeakOpen ?: femaleIdle else maleSpeakWide ?: maleSpeakOpen ?: maleIdle
+                }
+                lipOpenness > 0.12f || lipState == LipState.HALF_OPEN || lipState == LipState.SLIGHT -> {
+                    if (isFemale) femaleSpeakOpen ?: femaleIdle else maleSpeakOpen ?: maleIdle
+                }
+                else -> {
+                    if (isFemale) femaleIdle else maleIdle
+                }
+            }
+        }
+
+        // Priority 4: Natural Idle resting
+        return if (isFemale) femaleIdle else maleIdle
+    }
+
+    private fun drawBitmapFrame(canvas: Canvas, cx: Float, cy: Float, radius: Float, bmp: Bitmap?, gender: AvatarGender) {
         if (bmp != null && !bmp.isRecycled) {
             srcRect.set(0, 0, bmp.width, bmp.height)
             dstRect.set(cx - radius, cy - radius, cx + radius, cy + radius)
@@ -160,7 +171,7 @@ class RealisticAvatarRenderer(private val context: Context) : AvatarRenderer {
             paint.isFilterBitmap = true
             canvas.drawBitmap(bmp, srcRect, dstRect, paint)
         } else {
-            // Fallback fill if bitmap loading failed
+            // Fallback fill if bitmap not ready
             paint.reset()
             paint.color = if (gender == AvatarGender.FEMALE) Color.parseColor("#FFE4CD") else Color.parseColor("#FFDFC4")
             canvas.drawCircle(cx, cy, radius, paint)
@@ -173,16 +184,16 @@ class RealisticAvatarRenderer(private val context: Context) : AvatarRenderer {
             AvatarState.LISTENING -> Color.parseColor("#10B981") // Emerald Green
             AvatarState.THINKING -> Color.parseColor("#38BDF8")  // Sky Blue
             AvatarState.ALERT -> Color.parseColor("#F97316")     // Coral Orange
-            AvatarState.IDLE -> Color.parseColor("#64748B")      // Slate Grey
+            AvatarState.IDLE -> Color.parseColor("#6366F1")      // Indigo
         }
 
-        val haloAlpha = ((0.25f + breath * 0.25f) * 255).toInt().coerceIn(0, 255)
-        val haloRadius = radius * (1.06f + breath * 0.04f)
+        val haloAlpha = ((0.30f + breath * 0.30f) * 255).toInt().coerceIn(0, 255)
+        val haloRadius = radius * (1.08f + breath * 0.05f)
 
         val gradient = RadialGradient(
             cx, cy, haloRadius,
             intArrayOf(Color.argb(haloAlpha, Color.red(haloColor), Color.green(haloColor), Color.blue(haloColor)), Color.TRANSPARENT),
-            floatArrayOf(0.75f, 1.0f),
+            floatArrayOf(0.70f, 1.0f),
             Shader.TileMode.CLAMP
         )
         paint.reset()
@@ -203,134 +214,8 @@ class RealisticAvatarRenderer(private val context: Context) : AvatarRenderer {
         paint.reset()
         paint.isAntiAlias = true
         paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 2.8f
+        paint.strokeWidth = 3.2f
         paint.color = rimColor
-        canvas.drawCircle(cx, cy, radius - 1.4f, paint)
-    }
-
-    private fun drawRealisticEyelids(canvas: Canvas, cx: Float, cy: Float, u: Float, frameData: AvatarFrameData) {
-        val blink = frameData.blinkProgress
-        val isWink = frameData.isWinking
-
-        if (blink < 0.15f && !isWink) return
-
-        // Calibrated eye centers on 512x512 photo face
-        val leftEyeX = cx - 11.5f * u
-        val rightEyeX = cx + 11.5f * u
-        val eyeY = cy - 13.0f * u
-        val eyeRadiusX = 7.5f * u
-        val eyeRadiusY = 5.5f * u
-
-        // Left Eye Eyelid
-        if (blink >= 0.15f) {
-            drawSingleEyelid(canvas, leftEyeX, eyeY, eyeRadiusX, eyeRadiusY, u, blink)
-        }
-
-        // Right Eye (or Wink)
-        val rightBlink = if (isWink) 1.0f else blink
-        if (rightBlink >= 0.15f) {
-            drawSingleEyelid(canvas, rightEyeX, eyeY, eyeRadiusX, eyeRadiusY, u, rightBlink)
-        }
-    }
-
-    private fun drawSingleEyelid(
-        canvas: Canvas,
-        x: Float,
-        y: Float,
-        rx: Float,
-        ry: Float,
-        u: Float,
-        progress: Float,
-    ) {
-        paint.reset()
-        paint.isAntiAlias = true
-
-        val coverH = (ry * 2.0f * progress).coerceAtMost(ry * 2.2f)
-
-        // Realistic skin-tone gradient for eyelid fold
-        eyelidPath.reset()
-        val topY = y - ry
-        val bottomY = topY + coverH
-        eyelidPath.moveTo(x - rx, y)
-        eyelidPath.cubicTo(x - rx * 0.4f, topY - 1.5f * u, x + rx * 0.4f, topY - 1.5f * u, x + rx, y)
-        eyelidPath.cubicTo(x + rx * 0.4f, bottomY, x - rx * 0.4f, bottomY, x - rx, y)
-        eyelidPath.close()
-
-        paint.style = Paint.Style.FILL
-        paint.color = Color.parseColor("#E8B99B") // Warm natural eyelid skin tone
-        paint.alpha = (progress * 240).toInt().coerceIn(0, 255)
-        canvas.drawPath(eyelidPath, paint)
-
-        // Delicate dark eyelash arc
-        if (progress > 0.6f) {
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 2.0f * u
-            paint.color = Color.parseColor("#2E1911")
-            paint.alpha = ((progress - 0.6f) / 0.4f * 230).toInt().coerceIn(0, 230)
-            paint.strokeCap = Paint.Cap.ROUND
-
-            val lashPath = Path()
-            lashPath.moveTo(x - rx * 0.95f, bottomY - 0.5f * u)
-            lashPath.cubicTo(x - rx * 0.3f, bottomY + 1.2f * u, x + rx * 0.3f, bottomY + 1.2f * u, x + rx * 0.95f, bottomY - 0.5f * u)
-            canvas.drawPath(lashPath, paint)
-        }
-    }
-
-    private fun drawRealisticLipSync(
-        canvas: Canvas,
-        cx: Float,
-        cy: Float,
-        u: Float,
-        lipState: LipState,
-        openness: Float,
-        state: AvatarState,
-    ) {
-        if (openness < 0.08f) {
-            // Mouth is resting at the natural smile in the photo; no overlay needed
-            return
-        }
-
-        // Calibrated mouth coordinates on photo face
-        val mouthY = cy + 2.0f * u
-        val baseWidth = 11.0f * u * lipState.widthScale
-        val openHeight = (openness * 7.5f * u).coerceAtLeast(0.5f)
-
-        paint.reset()
-        paint.isAntiAlias = true
-
-        mouthPath.reset()
-        val topMouthY = mouthY - openHeight * 0.3f
-        val bottomMouthY = mouthY + openHeight * 0.7f
-
-        // Natural curved upper & lower lip boundary
-        mouthPath.moveTo(cx - baseWidth, mouthY)
-        mouthPath.cubicTo(cx - baseWidth * 0.4f, topMouthY, cx + baseWidth * 0.4f, topMouthY, cx + baseWidth, mouthY)
-        mouthPath.cubicTo(cx + baseWidth * 0.4f, bottomMouthY, cx - baseWidth * 0.4f, bottomMouthY, cx - baseWidth, mouthY)
-        mouthPath.close()
-
-        // 1. Dark inner mouth cavity
-        paint.style = Paint.Style.FILL
-        paint.color = Color.parseColor("#4A0D18") // Realistic deep oral cavity shadow
-        canvas.drawPath(mouthPath, paint)
-
-        // 2. Upper realistic clean white teeth row
-        if (openHeight > 1.2f * u) {
-            paint.color = Color.parseColor("#FAF5F0")
-            val teethRect = RectF(cx - baseWidth * 0.55f, topMouthY + 0.2f * u, cx + baseWidth * 0.55f, topMouthY + openHeight * 0.42f)
-            canvas.drawRoundRect(teethRect, 1.8f * u, 1.8f * u, paint)
-        }
-
-        // 3. Lower soft pink tongue curve
-        if (openHeight > 2.8f * u) {
-            paint.color = Color.parseColor("#E17B87")
-            canvas.drawCircle(cx, bottomMouthY - openHeight * 0.15f, baseWidth * 0.38f, paint)
-        }
-
-        // 4. Photorealistic glossy lip contour blend
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 1.6f * u
-        paint.color = Color.parseColor("#BE185D")
-        paint.alpha = (openness * 200).toInt().coerceIn(0, 200)
-        canvas.drawPath(mouthPath, paint)
+        canvas.drawCircle(cx, cy, radius - 1.6f, paint)
     }
 }
