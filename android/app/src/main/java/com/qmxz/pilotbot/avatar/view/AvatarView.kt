@@ -1,12 +1,17 @@
 package com.qmxz.pilotbot.avatar.view
 
+import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Canvas
-import android.graphics.RectF
+import android.graphics.Color
 import android.util.AttributeSet
-import android.view.Choreographer
 import android.view.HapticFeedbackConstants
 import android.view.View
+import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.FrameLayout
 import com.qmxz.pilotbot.avatar.lipsync.LipState
 import com.qmxz.pilotbot.avatar.lipsync.LipSyncEngine
 import com.qmxz.pilotbot.avatar.state.AvatarGender
@@ -14,47 +19,72 @@ import com.qmxz.pilotbot.avatar.state.AvatarState
 import com.qmxz.pilotbot.avatar.state.AvatarStateMachine
 
 /**
- * 60 FPS Hardware-Accelerated View for displaying the expressive 2.5D Virtual Copilot.
+ * 60 FPS Hardware-Accelerated 3D Interactive Digital Human View.
+ * Embeds a local WebGL/Three.js 3D character engine with continuous facial blendshapes,
+ * smooth 3D blinking, dynamic speech lip-sync jaw morphing, and head glance tracking.
  */
 class AvatarView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
-) : View(context, attrs, defStyleAttr), LipSyncEngine.LipSyncListener, Choreographer.FrameCallback {
+) : FrameLayout(context, attrs, defStyleAttr), LipSyncEngine.LipSyncListener {
 
     val stateMachine = AvatarStateMachine()
-
-    private val realisticRenderer = RealisticAvatarRenderer(context)
-    private val boundsRect = RectF()
+    private val webView = WebView(context)
 
     private var activeLipSyncEngine: LipSyncEngine? = null
-    private var currentLipState = LipState.CLOSED
-    private var currentLipOpenness = 0.0f
+    private var isPageLoaded = false
+    private var onInteractiveClickListener: (() -> Unit)? = null
 
     var avatarGender: AvatarGender = AvatarGender.FEMALE
         set(value) {
-            if (field != value) {
-                field = value
-                invalidate()
-            }
+            field = value
+            sendJsCommand("window.setAvatarGender('${if (value == AvatarGender.MALE) "male" else "female"}')")
         }
 
     var state: AvatarState
         get() = stateMachine.currentState
         set(value) {
             stateMachine.transitionTo(value)
+            sendJsCommand("window.setAvatarState('${value.name.lowercase()}')")
         }
-
-    private var isRunning = false
-    private var onInteractiveClickListener: (() -> Unit)? = null
 
     init {
-        setOnClickListener {
-            performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-            stateMachine.triggerInteractiveReaction()
-            onInteractiveClickListener?.invoke()
+        setupWebView()
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun setupWebView() {
+        webView.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+        webView.setBackgroundColor(Color.TRANSPARENT)
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+
+        val settings = webView.settings
+        settings.javaScriptEnabled = true
+        settings.allowFileAccess = true
+        settings.domStorageEnabled = true
+        settings.cacheMode = WebSettings.LOAD_NO_CACHE
+
+        webView.addJavascriptInterface(AvatarJsBridge(), "AndroidBridge")
+        webView.webChromeClient = WebChromeClient()
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                isPageLoaded = true
+                sendJsCommand("window.setAvatarGender('${if (avatarGender == AvatarGender.MALE) "male" else "female"}')")
+                sendJsCommand("window.setAvatarState('${state.name.lowercase()}')")
+            }
         }
-        startAnimationLoop()
+
+        webView.loadUrl("file:///android_asset/avatar/avatar_3d.html")
+        addView(webView)
+    }
+
+    private fun sendJsCommand(script: String) {
+        post {
+            if (isPageLoaded) {
+                webView.evaluateJavascript(script, null)
+            }
+        }
     }
 
     fun setOnInteractiveClickListener(listener: () -> Unit) {
@@ -68,60 +98,26 @@ class AvatarView @JvmOverloads constructor(
     }
 
     override fun onLipUpdate(state: LipState, rawOpenness: Float) {
-        currentLipState = state
-        currentLipOpenness = rawOpenness
+        sendJsCommand("window.setLipOpenness($rawOpenness)")
     }
 
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        startAnimationLoop()
+    fun triggerWink() {
+        sendJsCommand("window.triggerWink()")
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        stopAnimationLoop()
         activeLipSyncEngine?.removeListener(this)
     }
 
-    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
-        super.onWindowFocusChanged(hasWindowFocus)
-        if (hasWindowFocus) {
-            startAnimationLoop()
+    inner class AvatarJsBridge {
+        @JavascriptInterface
+        fun onAvatarClicked() {
+            post {
+                performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                stateMachine.triggerInteractiveReaction()
+                onInteractiveClickListener?.invoke()
+            }
         }
-    }
-
-    override fun onVisibilityChanged(changedView: View, visibility: Int) {
-        super.onVisibilityChanged(changedView, visibility)
-        if (visibility == VISIBLE) {
-            startAnimationLoop()
-        }
-    }
-
-    private fun startAnimationLoop() {
-        if (!isRunning) {
-            isRunning = true
-            Choreographer.getInstance().removeFrameCallback(this)
-            Choreographer.getInstance().postFrameCallback(this)
-        }
-    }
-
-    private fun stopAnimationLoop() {
-        isRunning = false
-        Choreographer.getInstance().removeFrameCallback(this)
-    }
-
-    override fun doFrame(frameTimeNanos: Long) {
-        if (isRunning) {
-            invalidate()
-            Choreographer.getInstance().postFrameCallback(this)
-        }
-    }
-
-    override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas)
-        boundsRect.set(0f, 0f, width.toFloat(), height.toFloat())
-
-        val frameData = stateMachine.updateFrame()
-        realisticRenderer.drawWithGender(canvas, boundsRect, frameData, currentLipState, currentLipOpenness, avatarGender)
     }
 }
