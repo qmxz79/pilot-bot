@@ -47,9 +47,20 @@ class SmartSpeechToText(
     override suspend fun listenOnce(): String {
         val apiKey = config.endpoint.apiKey.trim()
         if (apiKey.isNotBlank()) {
-            // Universal Cloud ASR with AudioRecord
-            val wavBytes = audioRecorder.recordWav(maxDurationMs = 12000L)
-            return cloudStt.transcribe(wavBytes)
+            try {
+                // Universal Cloud ASR with AudioRecord
+                val wavBytes = audioRecorder.recordWav(maxDurationMs = 12000L)
+                return cloudStt.transcribe(wavBytes)
+            } catch (e: Exception) {
+                if (isSystemAsrAvailable) {
+                    try {
+                        return systemStt.listenOnce()
+                    } catch (_: Exception) {
+                        throw e
+                    }
+                }
+                throw e
+            }
         }
 
         if (isSystemAsrAvailable) {

@@ -1,8 +1,8 @@
 package com.qmxz.pilotbot.asr
 
 import com.qmxz.pilotbot.config.AppConfig
-import com.qmxz.pilotbot.llm.normalizeChatCompletionsUrl
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Cloud Speech-to-Text client compatible with OpenAI / SiliconFlow / Groq / DashScope / FastWhisper audio transcription endpoints.
+ * Features automatic multi-model failover on 503 (Service Unavailable) / 502 / 504 / 429 / 500 errors.
  */
 class CloudSpeechToText(
     private val config: AppConfig,
@@ -37,8 +38,40 @@ class CloudSpeechToText(
         }
 
         val transcriptionUrl = resolveTranscriptionUrl(asrBaseUrl)
-        val model = if (config.asrModel.isNotBlank()) config.asrModel.trim() else resolveAsrModel(asrBaseUrl)
+        val candidateModels = resolveCandidateModels(asrBaseUrl, config.asrModel.trim())
 
+        var lastError: Exception? = null
+
+        for (model in candidateModels) {
+            // Try up to 2 attempts per candidate model
+            for (attempt in 1..2) {
+                try {
+                    val result = executeTranscribeRequest(transcriptionUrl, asrKey, model, wavBytes)
+                    if (result.isNotBlank()) {
+                        return@withContext result
+                    }
+                } catch (e: Exception) {
+                    lastError = e
+                    // If error is transient (503/502/504/429/timeout), brief pause and retry/fallback
+                    val msg = e.message.orEmpty()
+                    if (msg.contains("503") || msg.contains("502") || msg.contains("504") || msg.contains("429") || msg.contains("timeout")) {
+                        delay(250L * attempt)
+                    } else {
+                        break // Non-transient error on this model, try next candidate model
+                    }
+                }
+            }
+        }
+
+        throw lastError ?: IOException("语音识别服务暂时不可用，请稍后重试")
+    }
+
+    private fun executeTranscribeRequest(
+        transcriptionUrl: String,
+        asrKey: String,
+        model: String,
+        wavBytes: ByteArray,
+    ): String {
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart(
@@ -71,10 +104,10 @@ class CloudSpeechToText(
                 } catch (_: Exception) {
                     bodyString
                 }
-                throw IOException("语音识别服务响应错误 (${resp.code}): $errorMsg")
+                throw IOException("语音识别服务响应错误 (${resp.code}) [model: $model]: $errorMsg")
             }
 
-            try {
+            return try {
                 val json = JSONObject(bodyString)
                 json.optString("text").trim()
             } catch (e: Exception) {
@@ -94,7 +127,6 @@ class CloudSpeechToText(
             }
             url = url.trimEnd('/')
 
-            // If user passed a full path ending with /chat/completions, replace it with /audio/transcriptions
             if (url.endsWith("/chat/completions", ignoreCase = true)) {
                 return url.removeSuffix("/chat/completions") + "/audio/transcriptions"
             }
@@ -108,19 +140,33 @@ class CloudSpeechToText(
             return "$url/audio/transcriptions"
         }
 
-        fun resolveAsrModel(baseUrl: String): String {
+        fun resolveCandidateModels(baseUrl: String, userCustomModel: String): List<String> {
+            if (userCustomModel.isNotBlank()) {
+                return listOf(userCustomModel, "FunAudioLLM/SenseVoiceSmall", "openai/whisper-large-v3-turbo")
+            }
             val lower = baseUrl.lowercase()
             return when {
-                lower.contains("siliconflow") -> "FunAudioLLM/SenseVoiceSmall"
-                lower.contains("groq") -> "whisper-large-v3"
-                else -> "FunAudioLLM/SenseVoiceSmall" // SenseVoiceSmall is standard on SiliconFlow, fallback whisper-1
+                lower.contains("siliconflow") -> listOf(
+                    "FunAudioLLM/SenseVoiceSmall",
+                    "openai/whisper-large-v3-turbo",
+                    "Tele-AI/TeleSpeech-ASR",
+                )
+                lower.contains("groq") -> listOf(
+                    "whisper-large-v3-turbo",
+                    "whisper-large-v3",
+                )
+                else -> listOf(
+                    "FunAudioLLM/SenseVoiceSmall",
+                    "openai/whisper-large-v3-turbo",
+                    "whisper-1",
+                )
             }
         }
 
         private fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(12, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
             .build()
     }
 }

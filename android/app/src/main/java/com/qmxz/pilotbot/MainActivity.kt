@@ -348,10 +348,14 @@ class MainActivity : AppCompatActivity() {
             onUserText = { text -> appendTranscript(getString(R.string.transcript_user), text) },
             onListenError = { msg ->
                 renderOnMain {
-                    roadNameText.text = "识别提示：$msg"
-                    copilotText.text = "💡 语音提示：$msg"
-                    Toast.makeText(this, "语音识别提示：$msg", Toast.LENGTH_LONG).show()
-                    copilot.speakDirect("语音识别提示：$msg")
+                    val friendlyMsg = when {
+                        msg.contains("503") || msg.contains("502") || msg.contains("504") -> "云端语音服务暂时繁忙，已自动切换备用通道，请重试说话~"
+                        msg.contains("未配置 API Key") -> "请在设置中填入 API Key 开启智能语音"
+                        else -> msg
+                    }
+                    roadNameText.text = "提示：$friendlyMsg"
+                    copilotText.text = "💡 $friendlyMsg"
+                    Toast.makeText(this, friendlyMsg, Toast.LENGTH_SHORT).show()
                 }
             },
             onInterrupt = { triggerInterruptionFeedback() },
