@@ -18,26 +18,17 @@ import com.qmxz.pilotbot.avatar.state.AvatarGender
 import com.qmxz.pilotbot.avatar.state.AvatarState
 
 /**
- * 100% Native High-Fidelity 60FPS Photorealistic Avatar Renderer.
- * Directly renders real-human photography with 60FPS continuous physical breathing,
- * smooth eyelid blinking, speaking mouth dynamics, and glowing smart status ring.
+ * 100% Native High-Fidelity Photorealistic Digital Human Renderer.
+ * Renders crystal-clear real-human copilot portraits with real-time audio-reactive
+ * cockpit smart halo, smooth physical breathing pulse, and luxury status ring.
+ * Pure native, zero artifacts, zero distortions.
  */
 class RealisticAvatarRenderer(private val context: Context) : AvatarRenderer {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val clipPath = Path()
 
-    // Real-human portrait assets
-    private var femalePhoto: Bitmap? = null
-    private var femaleBlink: Bitmap? = null
-    private var femaleWink: Bitmap? = null
-    private var femaleSpeakOpen: Bitmap? = null
-    private var femaleSpeakWide: Bitmap? = null
-
-    private var malePhoto: Bitmap? = null
-    private var maleBlink: Bitmap? = null
-    private var maleWink: Bitmap? = null
-    private var maleSpeakOpen: Bitmap? = null
-    private var maleSpeakWide: Bitmap? = null
+    private var femaleBitmap: Bitmap? = null
+    private var maleBitmap: Bitmap? = null
 
     private val srcRect = Rect()
     private val dstRect = RectF()
@@ -52,19 +43,8 @@ class RealisticAvatarRenderer(private val context: Context) : AvatarRenderer {
                 inPreferredConfig = Bitmap.Config.ARGB_8888
             }
             val res = context.resources
-            femalePhoto = BitmapFactory.decodeResource(res, R.drawable.avatar_female_real, opts)
-                ?: BitmapFactory.decodeResource(res, R.drawable.female_real_idle, opts)
-            femaleBlink = BitmapFactory.decodeResource(res, R.drawable.female_real_blink, opts)
-            femaleWink = BitmapFactory.decodeResource(res, R.drawable.female_real_wink, opts)
-            femaleSpeakOpen = BitmapFactory.decodeResource(res, R.drawable.female_real_speak_open, opts)
-            femaleSpeakWide = BitmapFactory.decodeResource(res, R.drawable.female_real_speak_wide, opts)
-
-            malePhoto = BitmapFactory.decodeResource(res, R.drawable.avatar_male_real, opts)
-                ?: BitmapFactory.decodeResource(res, R.drawable.male_real_idle, opts)
-            maleBlink = BitmapFactory.decodeResource(res, R.drawable.male_real_blink, opts)
-            maleWink = BitmapFactory.decodeResource(res, R.drawable.male_real_wink, opts)
-            maleSpeakOpen = BitmapFactory.decodeResource(res, R.drawable.male_real_speak_open, opts)
-            maleSpeakWide = BitmapFactory.decodeResource(res, R.drawable.male_real_speak_wide, opts)
+            femaleBitmap = BitmapFactory.decodeResource(res, R.drawable.avatar_female_real, opts)
+            maleBitmap = BitmapFactory.decodeResource(res, R.drawable.avatar_male_real, opts)
         }
     }
 
@@ -89,79 +69,31 @@ class RealisticAvatarRenderer(private val context: Context) : AvatarRenderer {
         val cx = bounds.centerX()
         val cy = bounds.centerY()
         val size = bounds.width().coerceAtMost(bounds.height())
-        val radius = (size / 2.0f) * 0.92f
-        val u = size / 100.0f
+        val radius = (size / 2.0f) * 0.90f
 
         canvas.save()
 
-        // 1. Draw outer dynamic breathing status glow halo
-        drawStatusHalo(canvas, cx, cy, radius, frameData.state, frameData.breathingFactor)
+        // 1. Draw outer audio-reactive smart cockpit breathing halo
+        drawStatusHalo(canvas, cx, cy, radius, frameData.state, frameData.breathingFactor, lipOpenness)
 
         // 2. Setup circular clipping mask for high-definition portrait
         clipPath.reset()
         clipPath.addCircle(cx, cy, radius, Path.Direction.CW)
         canvas.clipPath(clipPath)
 
-        // 3. 60 FPS Physical Breathing & Body Bobbing
-        val breathScale = 1.0f + (frameData.breathingFactor - 0.5f) * 0.035f
-        val breathOffsetY = (frameData.breathingFactor - 0.5f) * 2.5f * u
-
-        canvas.save()
-        canvas.scale(breathScale, breathScale, cx, cy)
-        canvas.translate(0f, breathOffsetY)
-        canvas.rotate(frameData.bodyTiltDegrees * 0.7f, cx, cy + radius * 0.8f)
-
-        // 4. Select the appropriate photographic frame
-        val activeBitmap = selectPhotorealBitmap(gender, frameData, lipState, lipOpenness)
-
-        // 5. Draw the crystal-clear real human photo frame
-        drawBitmapFrame(canvas, cx, cy, radius, activeBitmap, gender)
+        // 3. Draw crystal-clear real-human portrait
+        drawPortraitBitmap(canvas, cx, cy, radius, gender)
 
         canvas.restore()
 
-        // 6. Draw circular luxury border rim on top
-        drawBorderRim(canvas, cx, cy, radius, frameData.state)
+        // 4. Draw luxury metallic status rim on top
+        drawBorderRim(canvas, cx, cy, radius, frameData.state, lipOpenness)
 
         canvas.restore()
     }
 
-    private fun selectPhotorealBitmap(
-        gender: AvatarGender,
-        frameData: AvatarFrameData,
-        lipState: LipState,
-        lipOpenness: Float,
-    ): Bitmap? {
-        val isFemale = (gender == AvatarGender.FEMALE)
-
-        // Priority 1: Interactive wink on tap
-        if (frameData.isWinking) {
-            val winkBmp = if (isFemale) femaleWink else maleWink
-            if (winkBmp != null) return winkBmp
-        }
-
-        // Priority 2: Blinking (organic blink cycle every 2.5~4.5s)
-        if (frameData.blinkProgress > 0.35f) {
-            val blinkBmp = if (isFemale) femaleBlink else maleBlink
-            if (blinkBmp != null) return blinkBmp
-        }
-
-        // Priority 3: Audio-Driven Real-time Lip-Sync Speaking
-        if (frameData.state == AvatarState.SPEAKING || lipOpenness > 0.08f) {
-            if (lipOpenness > 0.50f || lipState == LipState.WIDE_AO || lipState == LipState.FLAT_EI) {
-                val wideBmp = if (isFemale) femaleSpeakWide else maleSpeakWide
-                if (wideBmp != null) return wideBmp
-            }
-            if (lipOpenness > 0.12f || lipState == LipState.HALF_OPEN || lipState == LipState.SLIGHT) {
-                val openBmp = if (isFemale) femaleSpeakOpen else maleSpeakOpen
-                if (openBmp != null) return openBmp
-            }
-        }
-
-        // Priority 4: Natural Real-human portrait
-        return if (isFemale) femalePhoto else malePhoto
-    }
-
-    private fun drawBitmapFrame(canvas: Canvas, cx: Float, cy: Float, radius: Float, bmp: Bitmap?, gender: AvatarGender) {
+    private fun drawPortraitBitmap(canvas: Canvas, cx: Float, cy: Float, radius: Float, gender: AvatarGender) {
+        val bmp = if (gender == AvatarGender.FEMALE) femaleBitmap else maleBitmap
         if (bmp != null && !bmp.isRecycled) {
             srcRect.set(0, 0, bmp.width, bmp.height)
             dstRect.set(cx - radius, cy - radius, cx + radius, cy + radius)
@@ -171,7 +103,7 @@ class RealisticAvatarRenderer(private val context: Context) : AvatarRenderer {
             paint.isDither = true
             canvas.drawBitmap(bmp, srcRect, dstRect, paint)
         } else {
-            // High quality fallback skin gradient
+            // High quality fallback
             paint.reset()
             paint.isAntiAlias = true
             paint.color = if (gender == AvatarGender.FEMALE) Color.parseColor("#FED7AA") else Color.parseColor("#FDE68A")
@@ -179,22 +111,34 @@ class RealisticAvatarRenderer(private val context: Context) : AvatarRenderer {
         }
     }
 
-    private fun drawStatusHalo(canvas: Canvas, cx: Float, cy: Float, radius: Float, state: AvatarState, breath: Float) {
-        val haloColor = when (state) {
-            AvatarState.SPEAKING -> Color.parseColor("#8B5CF6")  // Electric Purple
-            AvatarState.LISTENING -> Color.parseColor("#10B981") // Emerald Green
-            AvatarState.THINKING -> Color.parseColor("#38BDF8")  // Sky Blue
-            AvatarState.ALERT -> Color.parseColor("#F97316")     // Coral Orange
-            AvatarState.IDLE -> Color.parseColor("#6366F1")      // Indigo
+    private fun drawStatusHalo(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        radius: Float,
+        state: AvatarState,
+        breath: Float,
+        lipOpenness: Float,
+    ) {
+        val (haloColor, baseAlpha) = when (state) {
+            AvatarState.SPEAKING -> Color.parseColor("#8B5CF6") to 0.45f  // Electric Purple
+            AvatarState.LISTENING -> Color.parseColor("#10B981") to 0.42f // Emerald Green
+            AvatarState.THINKING -> Color.parseColor("#38BDF8") to 0.38f  // Sky Blue
+            AvatarState.ALERT -> Color.parseColor("#F97316") to 0.45f     // Coral Orange
+            AvatarState.IDLE -> Color.parseColor("#6366F1") to 0.28f      // Indigo
         }
 
-        val haloAlpha = ((0.28f + breath * 0.28f) * 255).toInt().coerceIn(0, 255)
-        val haloRadius = radius * (1.08f + breath * 0.05f)
+        val speechEnergy = if (state == AvatarState.SPEAKING) lipOpenness * 0.25f else 0.0f
+        val haloAlpha = ((baseAlpha + breath * 0.15f + speechEnergy) * 255).toInt().coerceIn(0, 255)
+        val haloRadius = radius * (1.08f + breath * 0.04f + speechEnergy * 0.12f)
 
         val gradient = RadialGradient(
             cx, cy, haloRadius,
-            intArrayOf(Color.argb(haloAlpha, Color.red(haloColor), Color.green(haloColor), Color.blue(haloColor)), Color.TRANSPARENT),
-            floatArrayOf(0.72f, 1.0f),
+            intArrayOf(
+                Color.argb(haloAlpha, Color.red(haloColor), Color.green(haloColor), Color.blue(haloColor)),
+                Color.TRANSPARENT
+            ),
+            floatArrayOf(0.70f, 1.0f),
             Shader.TileMode.CLAMP
         )
         paint.reset()
@@ -203,20 +147,20 @@ class RealisticAvatarRenderer(private val context: Context) : AvatarRenderer {
         canvas.drawCircle(cx, cy, haloRadius, paint)
     }
 
-    private fun drawBorderRim(canvas: Canvas, cx: Float, cy: Float, radius: Float, state: AvatarState) {
+    private fun drawBorderRim(canvas: Canvas, cx: Float, cy: Float, radius: Float, state: AvatarState, lipOpenness: Float) {
         val rimColor = when (state) {
             AvatarState.SPEAKING -> Color.parseColor("#A78BFA")
             AvatarState.LISTENING -> Color.parseColor("#34D399")
             AvatarState.THINKING -> Color.parseColor("#60A5FA")
             AvatarState.ALERT -> Color.parseColor("#FB923C")
-            AvatarState.IDLE -> Color.parseColor("#CBD5E1")
+            AvatarState.IDLE -> Color.parseColor("#E2E8F0")
         }
 
         paint.reset()
         paint.isAntiAlias = true
         paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 3.0f
+        paint.strokeWidth = 3.2f + (if (state == AvatarState.SPEAKING) lipOpenness * 1.5f else 0.0f)
         paint.color = rimColor
-        canvas.drawCircle(cx, cy, radius - 1.5f, paint)
+        canvas.drawCircle(cx, cy, radius - 1.6f, paint)
     }
 }
