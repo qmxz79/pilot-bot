@@ -63,6 +63,8 @@ class AvatarView @JvmOverloads constructor(
         settings.javaScriptEnabled = true
         settings.allowFileAccess = true
         settings.allowContentAccess = true
+        settings.allowFileAccessFromFileURLs = true
+        settings.allowUniversalAccessFromFileURLs = true
         settings.domStorageEnabled = true
         settings.cacheMode = WebSettings.LOAD_NO_CACHE
 

@@ -176,6 +176,15 @@ class SettingsActivity : AppCompatActivity() {
         }
         googleMapsApiKey.setText(config.googleMapsApiKey)
 
+        val voiceRadioGroup = findViewById<RadioGroup>(R.id.voiceRadioGroup)
+        when (config.ttsVoice) {
+            "voiceSweetFemale" -> voiceRadioGroup.check(R.id.voiceSweetFemaleRadio)
+            "voiceLivelyFemale" -> voiceRadioGroup.check(R.id.voiceLivelyFemaleRadio)
+            "voiceSunnyMale" -> voiceRadioGroup.check(R.id.voiceSunnyMaleRadio)
+            "voiceCalmMale" -> voiceRadioGroup.check(R.id.voiceCalmMaleRadio)
+            else -> voiceRadioGroup.check(R.id.voiceAutoRadio)
+        }
+
         findViewById<MaterialButton>(R.id.saveSettingsButton).setOnClickListener {
             val selectedId = presetIds[personaSpinner.selectedItemPosition]
             config.personaId = selectedId
@@ -207,6 +216,13 @@ class SettingsActivity : AppCompatActivity() {
                 com.qmxz.pilotbot.avatar.state.AvatarGender.MALE
             } else {
                 com.qmxz.pilotbot.avatar.state.AvatarGender.FEMALE
+            }
+            config.ttsVoice = when (voiceRadioGroup.checkedRadioButtonId) {
+                R.id.voiceSweetFemaleRadio -> "voiceSweetFemale"
+                R.id.voiceLivelyFemaleRadio -> "voiceLivelyFemale"
+                R.id.voiceSunnyMaleRadio -> "voiceSunnyMale"
+                R.id.voiceCalmMaleRadio -> "voiceCalmMale"
+                else -> "auto"
             }
             config.googleMapsApiKey = googleMapsApiKey.text?.toString()?.trim().orEmpty()
             Toast.makeText(this, "设置已保存", Toast.LENGTH_SHORT).show()

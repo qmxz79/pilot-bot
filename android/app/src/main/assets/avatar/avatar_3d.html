@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PilotBot Real 3D Digital Copilot</title>
+    <title>PilotBot 3D Digital Copilot</title>
     <style>
         * {
             margin: 0;
@@ -37,36 +37,20 @@
             width: 100% !important;
             height: 100% !important;
         }
-        #loading-hint {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: #94a3b8;
-            font-family: sans-serif;
-            font-size: 11px;
-            pointer-events: none;
-            display: none;
-        }
     </style>
     <script src="three.min.js"></script>
     <script src="GLTFLoader.js"></script>
 </head>
 <body>
-    <div id="avatar-container">
-        <div id="loading-hint">3D 加载中...</div>
-    </div>
+    <div id="avatar-container"></div>
 
     <script>
         // =========================================================================
-        // PilotBot Authentic 3D Rigged Digital Human Engine
+        // PilotBot 60 FPS 3D Digital Human Engine (WebGL PBR + Skeletal Dynamics)
         // =========================================================================
         let scene, camera, renderer;
-        let femaleModel = null, maleModel = null;
-        let activeModel = null;
-        let activeHeadBone = null;
-        let activeNeckBone = null;
-        let activeSpineBone = null;
+        let femaleGroup, maleGroup;
+        let activeGroup = null;
 
         let currentGender = 'female';
         let currentState = 'idle';
@@ -77,43 +61,49 @@
         let targetHeadRotX = 0, targetHeadRotY = 0, targetHeadRotZ = 0;
 
         const container = document.getElementById('avatar-container');
-        const loadingHint = document.getElementById('loading-hint');
 
         function init() {
-            const width = container.clientWidth || window.innerWidth;
-            const height = container.clientHeight || window.innerHeight;
+            const width = container.clientWidth || window.innerWidth || 200;
+            const height = container.clientHeight || window.innerHeight || 200;
 
             scene = new THREE.Scene();
 
-            camera = new THREE.PerspectiveCamera(35, width / height, 0.1, 50);
-            camera.position.set(0, 1.48, 1.35); // Focus on upper body & head
+            camera = new THREE.PerspectiveCamera(36, width / height, 0.1, 50);
+            camera.position.set(0, 0.28, 2.15);
 
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
             renderer.setSize(width, height);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0));
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1.0, 2.0));
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.toneMappingExposure = 1.3;
+            renderer.toneMappingExposure = 1.35;
             renderer.outputEncoding = THREE.sRGBEncoding;
             container.appendChild(renderer.domElement);
 
             // Studio 3-Point Cockpit Lighting
-            const ambient = new THREE.AmbientLight(0xffeedd, 1.1);
+            const ambient = new THREE.AmbientLight(0xffeedd, 1.2);
             scene.add(ambient);
 
             const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
-            keyLight.position.set(1.5, 3.0, 2.0);
+            keyLight.position.set(1.5, 2.5, 2.0);
             scene.add(keyLight);
 
-            const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.8);
-            fillLight.position.set(-1.8, 1.0, 1.5);
+            const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.85);
+            fillLight.position.set(-1.8, 0.8, 1.5);
             scene.add(fillLight);
 
-            const rimLight = new THREE.DirectionalLight(0xc084fc, 1.2);
+            const rimLight = new THREE.DirectionalLight(0xc084fc, 1.3);
             rimLight.position.set(0, 2.5, -2.0);
             scene.add(rimLight);
 
-            // Load 3D GLB Models
-            load3DModels();
+            // Construct 3D Characters
+            femaleGroup = build3DCharacter('female');
+            maleGroup = build3DCharacter('male');
+
+            scene.add(femaleGroup.root);
+            scene.add(maleGroup.root);
+
+            setGender(currentGender);
+            updateGlow();
 
             container.addEventListener('pointerdown', () => {
                 triggerTap();
@@ -126,101 +116,240 @@
             animate(0);
         }
 
-        function load3DModels() {
-            loadingHint.style.display = 'block';
-            const loader = new THREE.GLTFLoader();
+        // Exquisite 3D Humanoid Character Constructor
+        function build3DCharacter(gender) {
+            const isFemale = (gender === 'female');
+            const root = new THREE.Group();
 
-            // 1. Female 3D Avatar (Michelle.glb)
-            loader.load('michelle.glb', (gltf) => {
-                femaleModel = gltf.scene;
-                femaleModel.position.set(0, 0, 0);
-                femaleModel.traverse((child) => {
-                    if (child.isMesh) {
-                        child.castShadow = true;
-                        child.receiveShadow = true;
-                    }
-                    if (child.isBone && child.name.includes('Head')) {
-                        femaleModel.headBone = child;
-                    }
-                    if (child.isBone && child.name.includes('Neck')) {
-                        femaleModel.neckBone = child;
-                    }
-                    if (child.isBone && child.name.includes('Spine2')) {
-                        femaleModel.spineBone = child;
-                    }
-                });
-                scene.add(femaleModel);
-                loadingHint.style.display = 'none';
-                updateActiveGender();
-            }, undefined, (err) => {
-                console.error('Error loading female model:', err);
-                loadingHint.style.display = 'none';
+            // PBR Materials
+            const skinColor = isFemale ? 0xffdfd0 : 0xf6d4be;
+            const skinMat = new THREE.MeshStandardMaterial({
+                color: skinColor,
+                roughness: 0.45,
+                metalness: 0.05,
             });
 
-            // 2. Male 3D Avatar (Soldier.glb)
-            loader.load('soldier.glb', (gltf) => {
-                maleModel = gltf.scene;
-                maleModel.position.set(0, 0, 0);
-                maleModel.traverse((child) => {
-                    if (child.isMesh) {
-                        child.castShadow = true;
-                        child.receiveShadow = true;
-                    }
-                    if (child.isBone && child.name.includes('Head')) {
-                        maleModel.headBone = child;
-                    }
-                    if (child.isBone && child.name.includes('Neck')) {
-                        maleModel.neckBone = child;
-                    }
-                    if (child.isBone && child.name.includes('Spine2')) {
-                        maleModel.spineBone = child;
-                    }
-                });
-                scene.add(maleModel);
-                updateActiveGender();
-            }, undefined, (err) => {
-                console.error('Error loading male model:', err);
+            const clothColor = isFemale ? 0x0284c7 : 0x1e3a8a;
+            const clothMat = new THREE.MeshStandardMaterial({
+                color: clothColor,
+                roughness: 0.75,
             });
-        }
 
-        function updateActiveGender() {
-            const isFemale = (currentGender === 'female');
-            if (femaleModel) {
-                femaleModel.visible = isFemale;
-                if (isFemale) {
-                    activeModel = femaleModel;
-                    activeHeadBone = femaleModel.headBone;
-                    activeNeckBone = femaleModel.neckBone;
-                    activeSpineBone = femaleModel.spineBone;
-                }
+            const hairColor = isFemale ? 0x3e2723 : 0x1f2937;
+            const hairMat = new THREE.MeshStandardMaterial({
+                color: hairColor,
+                roughness: 0.58,
+                metalness: 0.15,
+            });
+
+            const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.15 });
+            const irisMat = new THREE.MeshStandardMaterial({ color: isFemale ? 0x451a03 : 0x1e293b, roughness: 0.2 });
+            const pupilMat = new THREE.MeshBasicMaterial({ color: 0x050505 });
+            const lipMat = new THREE.MeshStandardMaterial({
+                color: isFemale ? 0xdb2777 : 0xb45309,
+                roughness: isFemale ? 0.28 : 0.55,
+                metalness: 0.06,
+            });
+            const teethMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+            const mouthInsideMat = new THREE.MeshBasicMaterial({ color: 0x3b0710 });
+
+            // 1. Torso & Shoulders
+            const bodyJoint = new THREE.Group();
+            root.add(bodyJoint);
+
+            const torso = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.38, 0.48, 0.72, 24),
+                clothMat
+            );
+            torso.position.set(0, -0.45, -0.05);
+            bodyJoint.add(torso);
+
+            const collar = new THREE.Mesh(
+                new THREE.TorusGeometry(0.18, 0.045, 12, 24),
+                new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 })
+            );
+            collar.rotation.x = Math.PI / 2;
+            collar.position.set(0, -0.09, 0.02);
+            bodyJoint.add(collar);
+
+            // Neck
+            const neck = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.11, 0.13, 0.22, 16),
+                skinMat
+            );
+            neck.position.set(0, 0.02, -0.02);
+            bodyJoint.add(neck);
+
+            // 2. Head Joint (Rigged 3D Pivot for Nods & Gaze)
+            const headJoint = new THREE.Group();
+            headJoint.position.set(0, 0.14, 0);
+            bodyJoint.add(headJoint);
+
+            // Cranium Mesh
+            const headGeo = new THREE.SphereGeometry(0.36, 32, 24);
+            headGeo.scale(0.92, 1.15, 1.0);
+            const headMesh = new THREE.Mesh(headGeo, skinMat);
+            headMesh.position.set(0, 0.28, 0);
+            headJoint.add(headMesh);
+
+            // Chin & Jaw
+            const chinGeo = new THREE.ConeGeometry(0.18, 0.26, 16);
+            chinGeo.scale(isFemale ? 0.92 : 1.16, 1.0, 0.82);
+            const chinMesh = new THREE.Mesh(chinGeo, skinMat);
+            chinMesh.rotation.x = Math.PI;
+            chinMesh.position.set(0, 0.02, 0.12);
+            headJoint.add(chinMesh);
+
+            // Nose
+            const noseGeo = new THREE.ConeGeometry(0.045, 0.12, 12);
+            noseGeo.scale(0.8, 1.0, 1.2);
+            const noseMesh = new THREE.Mesh(noseGeo, skinMat);
+            noseMesh.rotation.x = 0.2;
+            noseMesh.position.set(0, 0.24, 0.36);
+            headJoint.add(noseMesh);
+
+            // 3. 3D Eyes
+            const eyeSpacing = isFemale ? 0.145 : 0.155;
+            const eyeY = 0.30;
+            const eyeZ = 0.29;
+            const eyeRadius = isFemale ? 0.065 : 0.062;
+
+            function createEye(isLeft) {
+                const eyeGroup = new THREE.Group();
+                const sign = isLeft ? -1 : 1;
+                eyeGroup.position.set(sign * eyeSpacing, eyeY, eyeZ);
+
+                const eyeball = new THREE.Mesh(new THREE.SphereGeometry(eyeRadius, 16, 16), eyeWhiteMat);
+                eyeGroup.add(eyeball);
+
+                const iris = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.02, 16), irisMat);
+                iris.rotation.x = Math.PI / 2;
+                iris.position.set(0, 0, eyeRadius * 0.9);
+                eyeGroup.add(iris);
+
+                const pupil = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.022, 16), pupilMat);
+                pupil.rotation.x = Math.PI / 2;
+                pupil.position.set(0, 0, eyeRadius * 0.92);
+                eyeGroup.add(pupil);
+
+                const highlight = new THREE.Mesh(new THREE.SphereGeometry(0.01, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+                highlight.position.set(sign * 0.014, 0.014, eyeRadius * 0.95);
+                eyeGroup.add(highlight);
+
+                // Eyelid BlendShape
+                const upperLidGeo = new THREE.SphereGeometry(eyeRadius * 1.06, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2);
+                const upperLid = new THREE.Mesh(upperLidGeo, skinMat);
+                upperLid.rotation.x = -Math.PI * 0.46;
+                eyeGroup.add(upperLid);
+
+                return { eyeGroup, upperLid, iris };
             }
-            if (maleModel) {
-                maleModel.visible = !isFemale;
-                if (!isFemale) {
-                    activeModel = maleModel;
-                    activeHeadBone = maleModel.headBone;
-                    activeNeckBone = maleModel.neckBone;
-                    activeSpineBone = maleModel.spineBone;
-                }
+
+            const leftEye = createEye(true);
+            const rightEye = createEye(false);
+            headJoint.add(leftEye.eyeGroup);
+            headJoint.add(rightEye.eyeGroup);
+
+            // 4. 3D Mouth & Dynamic Jaw
+            const mouthJoint = new THREE.Group();
+            mouthJoint.position.set(0, 0.12, 0.32);
+            headJoint.add(mouthJoint);
+
+            const mouthCavity = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.1), mouthInsideMat);
+            mouthCavity.position.set(0, 0, -0.04);
+            mouthJoint.add(mouthCavity);
+
+            const upperTeeth = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.025, 0.04), teethMat);
+            upperTeeth.position.set(0, 0.02, -0.01);
+            mouthJoint.add(upperTeeth);
+
+            const lowerTeeth = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.022, 0.04), teethMat);
+            lowerTeeth.position.set(0, -0.02, -0.01);
+            mouthJoint.add(lowerTeeth);
+
+            const upperLip = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.016, 8, 16, Math.PI), lipMat);
+            upperLip.rotation.x = Math.PI;
+            upperLip.position.set(0, 0.018, 0.01);
+            mouthJoint.add(upperLip);
+
+            const lowerLip = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.018, 8, 16, Math.PI), lipMat);
+            lowerLip.position.set(0, -0.018, 0.01);
+            mouthJoint.add(lowerLip);
+
+            // 5. 3D Hair
+            const hairGroup = new THREE.Group();
+            headJoint.add(hairGroup);
+
+            if (isFemale) {
+                const hairTop = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.39, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.65),
+                    hairMat
+                );
+                hairTop.position.set(0, 0.32, -0.02);
+                hairGroup.add(hairTop);
+
+                const bangL = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.55, 12), hairMat);
+                bangL.position.set(-0.28, 0.05, 0.12);
+                bangL.rotation.z = 0.2;
+                hairGroup.add(bangL);
+
+                const bangR = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.55, 12), hairMat);
+                bangR.position.set(0.28, 0.05, 0.12);
+                bangR.rotation.z = -0.2;
+                hairGroup.add(bangR);
+            } else {
+                const hairTop = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.38, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.55),
+                    hairMat
+                );
+                hairTop.position.set(0, 0.34, 0.0);
+                hairTop.scale.set(1.02, 1.15, 1.05);
+                hairGroup.add(hairTop);
+
+                const hairFront = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.20, 12), hairMat);
+                hairFront.rotation.x = -0.4;
+                hairFront.position.set(0, 0.52, 0.22);
+                hairGroup.add(hairFront);
             }
+
+            return {
+                root,
+                bodyJoint,
+                headJoint,
+                leftEye,
+                rightEye,
+                mouthJoint,
+                lowerLip,
+                upperLip,
+                lowerTeeth,
+                mouthCavity
+            };
         }
 
         function setGender(gender) {
             currentGender = (gender === 'male') ? 'male' : 'female';
-            updateActiveGender();
+            if (currentGender === 'male') {
+                femaleGroup.root.visible = false;
+                maleGroup.root.visible = true;
+                activeGroup = maleGroup;
+            } else {
+                femaleGroup.root.visible = true;
+                maleGroup.root.visible = false;
+                activeGroup = femaleGroup;
+            }
         }
 
         function setState(state) {
             currentState = state;
             switch(state) {
                 case 'listening':
-                    targetHeadRotX = 0.05;
-                    targetHeadRotY = -0.25; // Turns attentively towards driver
-                    targetHeadRotZ = 0.06;
+                    targetHeadRotX = 0.06;
+                    targetHeadRotY = -0.24; // Turns attentively towards driver
+                    targetHeadRotZ = 0.05;
                     break;
                 case 'thinking':
                     targetHeadRotX = -0.15; // Tilts head up thoughtfully
-                    targetHeadRotY = 0.20;
+                    targetHeadRotY = 0.18;
                     targetHeadRotZ = -0.08;
                     break;
                 case 'speaking':
@@ -247,8 +376,8 @@
         }
 
         function triggerWink() {
-            targetHeadRotX = -0.18; // Friendly nod
-            setTimeout(() => { targetHeadRotX = 0.0; }, 350);
+            targetHeadRotX = -0.16; // Friendly nod
+            setTimeout(() => { targetHeadRotX = 0.0; }, 320);
         }
 
         function triggerTap() {
@@ -287,38 +416,62 @@
         }
 
         // 60 FPS 3D Skeletal Animation Loop
+        let nextBlinkTime = performance.now() + 2000;
+        let isBlinking = false;
+        let blinkPhase = 0;
+
         function animate(time) {
             requestAnimationFrame(animate);
 
+            if (!activeGroup) return;
+
             const t = time * 0.001;
 
-            if (activeModel) {
-                // 1. 3D Physical Breathing (Spine expansion & vertical float)
-                const breathY = Math.sin(t * 1.8) * 0.008;
-                if (activeSpineBone) {
-                    activeSpineBone.rotation.x = Math.sin(t * 1.8) * 0.02;
-                }
-                activeModel.position.y = breathY;
+            // 1. 3D Physical Breathing
+            const breathY = Math.sin(t * 1.8) * 0.015;
+            const breathScale = 1.0 + Math.sin(t * 1.8) * 0.01;
+            activeGroup.bodyJoint.position.y = breathY;
+            activeGroup.bodyJoint.scale.set(breathScale, breathScale, breathScale);
 
-                // 2. 3D Speech Nodding & Cadence
-                let speechNod = 0;
-                if (currentState === 'speaking') {
-                    speechNod = Math.sin(t * 8.0) * 0.05;
-                }
-
-                headRotX += (targetHeadRotX + speechNod - headRotX) * 0.1;
-                headRotY += (targetHeadRotY - headRotY) * 0.1;
-                headRotZ += (targetHeadRotZ - headRotZ) * 0.1;
-
-                if (activeHeadBone) {
-                    activeHeadBone.rotation.x = headRotX;
-                    activeHeadBone.rotation.y = headRotY;
-                    activeHeadBone.rotation.z = headRotZ;
-                }
-                if (activeNeckBone) {
-                    activeNeckBone.rotation.y = headRotY * 0.4;
+            // 2. 3D Eyelid Blinking
+            if (time >= nextBlinkTime && !isBlinking) {
+                isBlinking = true;
+                blinkPhase = 0;
+            }
+            if (isBlinking) {
+                blinkPhase += 0.16;
+                if (blinkPhase >= Math.PI) {
+                    isBlinking = false;
+                    nextBlinkTime = time + 2500 + Math.random() * 2500;
                 }
             }
+            const currentBlink = isBlinking ? (Math.sin(blinkPhase) * 0.95) : 0.0;
+            const lidRot = -Math.PI * 0.46 + (currentBlink * Math.PI * 0.46);
+            activeGroup.leftEye.upperLid.rotation.x = lidRot;
+            activeGroup.rightEye.upperLid.rotation.x = lidRot;
+
+            // 3. 3D Speech Cadence & Nodding
+            let speechNod = 0;
+            if (currentState === 'speaking') {
+                speechNod = Math.sin(t * 7.5) * 0.045;
+            }
+
+            headRotX += (targetHeadRotX + speechNod - headRotX) * 0.1;
+            headRotY += (targetHeadRotY - headRotY) * 0.1;
+            headRotZ += (targetHeadRotZ - headRotZ) * 0.1;
+
+            activeGroup.headJoint.rotation.x = headRotX;
+            activeGroup.headJoint.rotation.y = headRotY;
+            activeGroup.headJoint.rotation.z = headRotZ;
+
+            // 4. 3D Lip-Sync Jaw Opening & Lip Morphing
+            lipOpenness += (targetLipOpenness - lipOpenness) * 0.25;
+
+            activeGroup.lowerLip.position.y = -0.018 - lipOpenness * 0.055;
+            activeGroup.lowerLip.scale.set(1.0 + lipOpenness * 0.15, 1.0 + lipOpenness * 0.65, 1.0);
+            activeGroup.upperLip.position.y = 0.018 + lipOpenness * 0.015;
+            activeGroup.lowerTeeth.position.y = -0.02 - lipOpenness * 0.035;
+            activeGroup.mouthCavity.scale.y = 1.0 + lipOpenness * 2.2;
 
             renderer.render(scene, camera);
         }
@@ -331,7 +484,6 @@
             renderer.setSize(width, height);
         }
 
-        // Global JS API for Android Bridge
         window.setAvatarGender = setGender;
         window.setAvatarState = setState;
         window.setLipOpenness = setLipOpenness;

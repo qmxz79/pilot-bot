@@ -67,7 +67,7 @@ class CloudTextToSpeech(
         val baseUrl = config.endpoint.baseUrl.trim()
         val speechUrl = resolveSpeechUrl(baseUrl)
         val model = resolveTtsModel(baseUrl)
-        val voice = resolveTtsVoice(baseUrl, config.personaId)
+        val voice = resolveTtsVoice(baseUrl, config)
 
         val payload = JSONObject().apply {
             put("model", model)
@@ -181,20 +181,31 @@ class CloudTextToSpeech(
             }
         }
 
-        fun resolveTtsVoice(baseUrl: String, personaId: String = ""): String {
+        fun resolveTtsVoice(
+            baseUrl: String,
+            config: AppConfig,
+        ): String {
             val lower = baseUrl.lowercase()
-            return when {
-                lower.contains("siliconflow") -> when (personaId) {
-                    "cheerful" -> "FunAudioLLM/CosyVoice2-0.5B:anna" // 活泼灵动闺蜜女声
-                    "calm" -> "FunAudioLLM/CosyVoice2-0.5B:benjamin" // 沉稳浑厚成熟老哥男声
-                    "sarcastic" -> "FunAudioLLM/CosyVoice2-0.5B:charles" // 幽默磁性损友男声
-                    else -> "FunAudioLLM/CosyVoice2-0.5B:anna"
-                }
-                else -> when (personaId) {
-                    "cheerful" -> "nova"
-                    "calm" -> "onyx" // Deep male voice
-                    "sarcastic" -> "echo" // Confident male voice
-                    else -> "alloy"
+            val isSiliconFlow = lower.contains("siliconflow")
+            val isMaleAvatar = (config.avatarGender == com.qmxz.pilotbot.avatar.state.AvatarGender.MALE)
+
+            return when (config.ttsVoice) {
+                "voiceSunnyMale" -> if (isSiliconFlow) "FunAudioLLM/CosyVoice2-0.5B:charles" else "echo"
+                "voiceCalmMale" -> if (isSiliconFlow) "FunAudioLLM/CosyVoice2-0.5B:benjamin" else "onyx"
+                "voiceSweetFemale" -> if (isSiliconFlow) "FunAudioLLM/CosyVoice2-0.5B:anna" else "nova"
+                "voiceLivelyFemale" -> if (isSiliconFlow) "FunAudioLLM/CosyVoice2-0.5B:alex" else "shimmer"
+                else -> { // "auto"
+                    if (isMaleAvatar) {
+                        when (config.personaId) {
+                            "calm" -> if (isSiliconFlow) "FunAudioLLM/CosyVoice2-0.5B:benjamin" else "onyx"
+                            else -> if (isSiliconFlow) "FunAudioLLM/CosyVoice2-0.5B:charles" else "echo"
+                        }
+                    } else {
+                        when (config.personaId) {
+                            "cheerful" -> if (isSiliconFlow) "FunAudioLLM/CosyVoice2-0.5B:alex" else "shimmer"
+                            else -> if (isSiliconFlow) "FunAudioLLM/CosyVoice2-0.5B:anna" else "nova"
+                        }
+                    }
                 }
             }
         }
