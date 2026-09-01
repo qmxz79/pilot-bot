@@ -56,9 +56,10 @@ class CloudTextToSpeech(
             playLock.withLock {
                 playAudioBytes(audioBytes, utteranceId)
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             pendingUtterances.remove(utteranceId)
             maybeIdle()
+            throw e
         }
     }
 
