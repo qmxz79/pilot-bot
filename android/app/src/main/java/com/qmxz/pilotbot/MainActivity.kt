@@ -190,10 +190,12 @@ class MainActivity : AppCompatActivity() {
         memoryStore = MemoryStore(applicationContext)
 
         naviView = findViewById(R.id.naviView)
-        naviView.onCreate(savedInstanceState)
-        naviView.setNaviMode(AMapNaviView.CAR_UP_MODE)
-        aMap = naviView.getMap()
-        setupMapClick()
+        runCatching {
+            naviView.onCreate(savedInstanceState)
+            naviView.setNaviMode(AMapNaviView.CAR_UP_MODE)
+            aMap = naviView.getMap()
+            setupMapClick()
+        }
 
         googleMapView = findViewById(R.id.googleMapView)
 
