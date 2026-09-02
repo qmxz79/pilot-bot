@@ -46,20 +46,26 @@ import com.qmxz.pilotbot.asr.SmartSpeechToText
 import com.qmxz.pilotbot.config.AppConfig
 import com.qmxz.pilotbot.config.MapProvider
 import com.qmxz.pilotbot.copilot.CopilotEngine
+import com.qmxz.pilotbot.diagnostics.AppIssue
+import com.qmxz.pilotbot.diagnostics.AppIssueMapper
+import com.qmxz.pilotbot.diagnostics.AppDiagnostics
 import com.qmxz.pilotbot.enroute.AmapEnRouteDataSource
 import com.qmxz.pilotbot.enroute.SystemGpsDataSource
 import com.qmxz.pilotbot.llm.OpenAiCompatibleProvider
 import com.qmxz.pilotbot.voice.ConversationMode
 import com.qmxz.pilotbot.memory.MemoryStore
 import com.qmxz.pilotbot.memory.UserMemory
+import com.qmxz.pilotbot.privacy.PrivacyConsent
 import com.qmxz.pilotbot.navi.AmapNavigationProvider
 import com.qmxz.pilotbot.navi.GeoPoint
 import com.qmxz.pilotbot.navi.NaviError
 import com.qmxz.pilotbot.navi.NaviEventListener
 import com.qmxz.pilotbot.navi.NaviState
+import com.qmxz.pilotbot.navi.NavigationCommandCoordinator
 import com.qmxz.pilotbot.navi.RoutePlan
 import com.qmxz.pilotbot.search.PlaceResult
 import com.qmxz.pilotbot.search.PlaceSearch
+import com.qmxz.pilotbot.search.PlaceSearchCoordinator
 import com.qmxz.pilotbot.tts.AndroidTextToSpeech
 import com.qmxz.pilotbot.tts.SmartTextToSpeech
 import com.qmxz.pilotbot.avatar.lipsync.LipSyncEngine
@@ -69,9 +75,6 @@ import com.qmxz.pilotbot.avatar.view.AvatarView
 import com.qmxz.pilotbot.voice.VoiceController
 import com.qmxz.pilotbot.voice.intent.VoiceIntent
 import com.qmxz.pilotbot.voice.intent.VoiceIntentParser
-import kotlin.coroutines.Continuation
-import kotlin.coroutines.EmptyCoroutineContext
-import kotlin.coroutines.startCoroutine
 
 /**
  * Driver-focused landscape/portrait copilot screen with dual map engines (AMap & Google Maps).
@@ -108,8 +111,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var googleMapView: WebView
 
     private lateinit var appConfig: AppConfig
+    private lateinit var diagnostics: AppDiagnostics
     private lateinit var memoryStore: MemoryStore
     private lateinit var navigationProvider: AmapNavigationProvider
+    private lateinit var navigationCommands: NavigationCommandCoordinator
     private lateinit var copilot: CopilotEngine
     private lateinit var voiceController: VoiceController
     private lateinit var tts: SmartTextToSpeech
@@ -117,6 +122,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var enRoute: AmapEnRouteDataSource
     private lateinit var systemGps: SystemGpsDataSource
     private lateinit var placeSearch: PlaceSearch
+    private lateinit var placeSearchCoordinator: PlaceSearchCoordinator
     private lateinit var googleMapEngine: GoogleMapEngine
     private val lipSyncEngine = LipSyncEngine()
 
@@ -169,6 +175,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onNaviError(error: NaviError) = renderOnMain {
+            diagnostics.record(AppIssueMapper.fromThrowable(AppIssue.Area.NAVIGATION, IllegalStateException(error.message)))
             if (error.code == 3) {
                 statusText.text = "当前处于海外（高德仅支持中国境内路网）"
                 roadNameText.text = "可点击顶部「🗺️ 虚拟行车」体验国内导航解说"
@@ -184,9 +191,16 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Defensive guard for explicit deep links or restored tasks that bypass the launcher gate.
+        if (!PrivacyConsent.hasAccepted(this)) {
+            startActivity(Intent(this, PrivacyConsentActivity::class.java))
+            finish()
+            return
+        }
         setContentView(R.layout.activity_main)
 
         appConfig = AppConfig(applicationContext)
+        diagnostics = AppDiagnostics(applicationContext)
         memoryStore = MemoryStore(applicationContext)
 
         naviView = findViewById(R.id.naviView)
@@ -238,7 +252,7 @@ class MainActivity : AppCompatActivity() {
                     return
                 }
                 searchRunnable = Runnable {
-                    performSearch(query) { result ->
+                    placeSearchCoordinator.search(query) { result ->
                         result.onSuccess { list ->
                             renderOnMain { showSearchResults(list) }
                         }
@@ -300,6 +314,9 @@ class MainActivity : AppCompatActivity() {
             onStatusChanged = {
                 renderOnMain { refreshVoiceStatus() }
             }
+            onCloudFallback = { error ->
+                diagnostics.record(AppIssueMapper.fromThrowable(AppIssue.Area.TTS, error))
+            }
         }
         smartStt = SmartSpeechToText(applicationContext, appConfig)
         refreshVoiceStatus()
@@ -324,6 +341,7 @@ class MainActivity : AppCompatActivity() {
                 renderOnMain { copilotAvatarView.state = AvatarState.IDLE }
                 lipSyncEngine.stopSpeaking()
             },
+            onIssue = diagnostics::record,
         )
 
         voiceController = VoiceController(
@@ -350,11 +368,9 @@ class MainActivity : AppCompatActivity() {
             onUserText = { text -> appendTranscript(getString(R.string.transcript_user), text) },
             onListenError = { msg ->
                 renderOnMain {
-                    val friendlyMsg = when {
-                        msg.contains("503") || msg.contains("502") || msg.contains("504") -> "云端语音服务暂时繁忙，已自动切换备用通道，请重试说话~"
-                        msg.contains("未配置 API Key") -> "请在设置中填入 API Key 开启智能语音"
-                        else -> msg
-                    }
+                    val issue = AppIssueMapper.fromThrowable(AppIssue.Area.ASR, IllegalStateException(msg))
+                    diagnostics.record(issue)
+                    val friendlyMsg = issue.userMessage
                     roadNameText.text = "提示：$friendlyMsg"
                     copilotText.text = "💡 $friendlyMsg"
                     Toast.makeText(this, friendlyMsg, Toast.LENGTH_SHORT).show()
@@ -367,9 +383,30 @@ class MainActivity : AppCompatActivity() {
         placeSearch = PlaceSearch(applicationContext)
         systemGps = SystemGpsDataSource(applicationContext)
         enRoute = AmapEnRouteDataSource(applicationContext)
+        placeSearchCoordinator = PlaceSearchCoordinator(
+            isGoogleActive = ::isGoogleMapsActive,
+            google = googleMapEngine,
+            amap = placeSearch,
+            cityCode = { enRoute.latestLocation()?.cityCode },
+            location = { enRoute.latestLocation()?.let { PlaceSearchCoordinator.Coordinates(it.latitude, it.longitude) } },
+            onFailure = { error -> diagnostics.record(AppIssueMapper.fromThrowable(AppIssue.Area.MAP, error)) },
+        )
 
         navigationProvider = AmapNavigationProvider(applicationContext)
         navigationProvider.addListener(naviListener)
+        navigationCommands = NavigationCommandCoordinator(
+            provider = navigationProvider,
+            onFailure = { error ->
+                val issue = AppIssueMapper.fromThrowable(AppIssue.Area.NAVIGATION, error)
+                diagnostics.record(issue)
+                renderOnMain {
+                    statusText.text = issue.userMessage
+                    startButton.visibility = View.VISIBLE
+                    startButton.isEnabled = true
+                    stopButton.visibility = View.GONE
+                }
+            },
+        )
 
         mountMapEngine()
         updateMicButtonAppearance()
@@ -382,6 +419,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (!::naviView.isInitialized) return
         if (!isGoogleMapsActive()) {
             naviView.onResume()
         }
@@ -397,32 +435,11 @@ class MainActivity : AppCompatActivity() {
     private fun isGoogleMapsActive(): Boolean =
         appConfig.mapProvider == MapProvider.GOOGLE || appConfig.mapProvider == MapProvider.GOOGLE_MAPS
 
-    private fun performSearch(keyword: String, callback: (Result<List<PlaceResult>>) -> Unit) {
-        if (isGoogleMapsActive()) {
-            googleMapEngine.searchPlaces(keyword, null, callback)
-        } else {
-            placeSearch.search(keyword, enRoute.latestLocation()?.cityCode, callback)
-        }
-    }
-
-    private fun performSearchNearby(keyword: String, callback: (Result<List<PlaceResult>>) -> Unit) {
-        if (isGoogleMapsActive()) {
-            googleMapEngine.searchPlaces(keyword, null, callback)
-        } else {
-            val loc = enRoute.latestLocation()
-            if (loc != null) {
-                placeSearch.searchAround(loc.latitude, loc.longitude, 3000, keyword, callback)
-            } else {
-                placeSearch.search(keyword, null, callback)
-            }
-        }
-    }
-
     private fun mountMapEngine() {
         if (isGoogleMapsActive()) {
             // Completely stop AMap background location, navi, and view to consume 0 AMap tokens/quota
             enRoute.stop()
-            suspend { navigationProvider.stopNavi() }.startCoroutine(handleCompletion)
+            navigationCommands.stop()
             naviView.onPause()
             naviView.visibility = View.GONE
 
@@ -564,7 +581,7 @@ class MainActivity : AppCompatActivity() {
             is VoiceIntent.NavigateTo -> {
                 val dest = intent.destination
                 copilot.speakDirect("正在为你搜索前往 $dest 的路线…")
-                performSearch(dest) { result ->
+                placeSearchCoordinator.search(dest) { result ->
                     result.onSuccess { list ->
                         renderOnMain {
                             if (list.isNotEmpty()) {
@@ -587,7 +604,7 @@ class MainActivity : AppCompatActivity() {
                 val home = memoryStore.getMemory().homeAddress
                 if (home.isNotBlank()) {
                     copilot.speakDirect("好嘞，准备带你回家！正在规划前往 $home 的路线。")
-                    performSearch(home) { result ->
+                    placeSearchCoordinator.search(home) { result ->
                         result.onSuccess { list ->
                             renderOnMain {
                                 if (list.isNotEmpty()) {
@@ -612,7 +629,7 @@ class MainActivity : AppCompatActivity() {
                 val company = memoryStore.getMemory().companyAddress
                 if (company.isNotBlank()) {
                     copilot.speakDirect("收到，准备去公司！正在规划前往 $company 的路线。")
-                    performSearch(company) { result ->
+                    placeSearchCoordinator.search(company) { result ->
                         result.onSuccess { list ->
                             renderOnMain {
                                 if (list.isNotEmpty()) {
@@ -636,7 +653,7 @@ class MainActivity : AppCompatActivity() {
             is VoiceIntent.SearchNearby -> {
                 val kw = intent.keyword
                 copilot.speakDirect("正在搜索附近的 $kw…")
-                performSearchNearby(kw) { result ->
+                placeSearchCoordinator.searchNearby(kw) { result ->
                     result.onSuccess { list ->
                         renderOnMain {
                             showAroundMarkers(list)
@@ -918,7 +935,7 @@ class MainActivity : AppCompatActivity() {
         if (keyword.isEmpty()) return
         statusText.text = if (isGoogleMapsActive()) "Google 全球搜索中…" else getString(R.string.searching)
         searchResults.visibility = View.GONE
-        performSearch(keyword) { result ->
+        placeSearchCoordinator.search(keyword) { result ->
             result.onSuccess { list ->
                 renderOnMain { showSearchResults(list) }
             }.onFailure { e ->
@@ -1190,7 +1207,7 @@ class MainActivity : AppCompatActivity() {
         stopButton.isEnabled = true
         statusText.setText(R.string.status_calculating_route)
         val route = RoutePlan(start = start, destination = destination)
-        suspend { navigationProvider.startNavi(route) }.startCoroutine(handleCompletion)
+        navigationCommands.start(route)
         enRoute.start(
             onAreaChanged = { area ->
                 copilot.narrate(
@@ -1222,26 +1239,7 @@ class MainActivity : AppCompatActivity() {
         roadNameText.setText(R.string.status_navigation_stopped)
         enRoute.stop()
         copilot.resetFatigueMonitor()
-        suspend { navigationProvider.stopNavi() }.startCoroutine(handleCompletion)
-    }
-
-    private val handleCompletion = object : Continuation<Unit> {
-        override val context = EmptyCoroutineContext
-
-        override fun resumeWith(result: Result<Unit>) {
-            result.exceptionOrNull()?.let { error ->
-                renderOnMain {
-                    statusText.text = getString(
-                        R.string.navi_error_format,
-                        -1,
-                        error.message ?: error.javaClass.simpleName,
-                    )
-                    startButton.visibility = View.VISIBLE
-                    startButton.isEnabled = true
-                    stopButton.visibility = View.GONE
-                }
-            }
-        }
+        navigationCommands.stop()
     }
 
     private fun sendChatText() {
@@ -1278,20 +1276,21 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        naviView.onPause()
+        if (::naviView.isInitialized) naviView.onPause()
     }
 
     override fun onDestroy() {
         destroyed = true
-        systemGps.stop()
-        googleMapEngine.onDestroy()
-        naviView.onDestroy()
+        if (::systemGps.isInitialized) systemGps.stop()
+        if (::googleMapEngine.isInitialized) googleMapEngine.onDestroy()
+        if (::naviView.isInitialized) naviView.onDestroy()
         mainHandler.removeCallbacksAndMessages(null)
-        navigationProvider.removeListener(naviListener)
-        enRoute.destroy()
-        voiceController.shutdown()
-        copilot.close()
-        tts.shutdown()
+        if (::navigationProvider.isInitialized) navigationProvider.removeListener(naviListener)
+        if (::navigationCommands.isInitialized) navigationCommands.close()
+        if (::enRoute.isInitialized) enRoute.destroy()
+        if (::voiceController.isInitialized) voiceController.shutdown()
+        if (::copilot.isInitialized) copilot.close()
+        if (::tts.isInitialized) tts.shutdown()
         super.onDestroy()
     }
 

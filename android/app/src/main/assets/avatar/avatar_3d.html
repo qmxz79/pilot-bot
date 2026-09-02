@@ -51,6 +51,10 @@
         let scene, camera, renderer;
         let femaleGroup, maleGroup;
         let activeGroup = null;
+        let activeLoadedAvatar = null;
+        const loadedAvatars = { female: null, male: null };
+        const avatarMixers = { female: null, male: null };
+        const animationClock = new THREE.Clock();
 
         let currentGender = 'female';
         let currentState = 'idle';
@@ -102,6 +106,11 @@
             scene.add(femaleGroup.root);
             scene.add(maleGroup.root);
 
+            // Use actual rigged GLB characters when available. The procedural avatar remains a
+            // resilient fallback for devices where a model cannot be decoded by WebGL.
+            loadRiggedAvatar('female', 'female.glb');
+            loadRiggedAvatar('male', 'male.glb');
+
             setGender(currentGender);
             updateGlow();
 
@@ -114,6 +123,36 @@
 
             window.addEventListener('resize', onResize);
             animate(0);
+        }
+
+        function loadRiggedAvatar(gender, assetName) {
+            const loader = new THREE.GLTFLoader();
+            loader.load(assetName, (gltf) => {
+                const root = gltf.scene;
+                const bounds = new THREE.Box3().setFromObject(root);
+                const size = bounds.getSize(new THREE.Vector3());
+                const maxDimension = Math.max(size.x, size.y, size.z) || 1;
+                const scale = 1.65 / maxDimension;
+                root.scale.setScalar(scale);
+
+                const normalizedBounds = new THREE.Box3().setFromObject(root);
+                const center = normalizedBounds.getCenter(new THREE.Vector3());
+                root.position.set(-center.x, -normalizedBounds.min.y - 0.96, 0);
+                root.userData.restY = root.position.y;
+                root.visible = false;
+                scene.add(root);
+
+                loadedAvatars[gender] = root;
+                if (gltf.animations && gltf.animations.length) {
+                    const mixer = new THREE.AnimationMixer(root);
+                    mixer.clipAction(gltf.animations[0]).play();
+                    avatarMixers[gender] = mixer;
+                }
+                setGender(currentGender);
+            }, undefined, (error) => {
+                // Keep the existing procedural avatar available when a vendor GLB is invalid.
+                console.warn('Avatar model failed to load:', assetName, error);
+            });
         }
 
         // Exquisite 3D Humanoid Character Constructor
@@ -328,6 +367,19 @@
 
         function setGender(gender) {
             currentGender = (gender === 'male') ? 'male' : 'female';
+            const loaded = loadedAvatars[currentGender];
+            if (loaded) {
+                femaleGroup.root.visible = false;
+                maleGroup.root.visible = false;
+                if (loadedAvatars.female) loadedAvatars.female.visible = currentGender === 'female';
+                if (loadedAvatars.male) loadedAvatars.male.visible = currentGender === 'male';
+                activeLoadedAvatar = loaded;
+                activeGroup = null;
+                return;
+            }
+            if (loadedAvatars.female) loadedAvatars.female.visible = false;
+            if (loadedAvatars.male) loadedAvatars.male.visible = false;
+            activeLoadedAvatar = null;
             if (currentGender === 'male') {
                 femaleGroup.root.visible = false;
                 maleGroup.root.visible = true;
@@ -422,6 +474,19 @@
 
         function animate(time) {
             requestAnimationFrame(animate);
+
+            const delta = animationClock.getDelta();
+            const activeMixer = avatarMixers[currentGender];
+            if (activeMixer) activeMixer.update(delta);
+
+            if (activeLoadedAvatar) {
+                const t = time * 0.001;
+                const breath = Math.sin(t * 1.8) * 0.006;
+                activeLoadedAvatar.position.y = activeLoadedAvatar.userData.restY + breath;
+                activeLoadedAvatar.rotation.y += (targetHeadRotY - activeLoadedAvatar.rotation.y) * 0.04;
+                renderer.render(scene, camera);
+                return;
+            }
 
             if (!activeGroup) return;
 

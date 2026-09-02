@@ -4,7 +4,7 @@
 
 ## 项目状态
 
-**M5 打磨完成（代码）：人设 JSON 导入/导出、文字输入兜底、首次启动引导。DESIGN §5 七层 + MVP 清单全部落地，待真机验收。**
+**安全化迭代进行中：已加入首次隐私同意门槛、release 禁止明文网络、Keystore 密钥保存，以及独立 LLM/ASR/TTS 配置。DESIGN §5 七层 + MVP 清单已落地，仍待真机验收。**
 
 - 代码：`android/`（包名 `com.qmxz.pilotbot`）
 - 设计：`DESIGN.md`
@@ -51,6 +51,18 @@ DESIGN.md                 设计文档
 5. Android Studio 打开 `android/` 目录，Sync 后运行到真机
 
 > ⚠️ `local.properties` 已在 `.gitignore` 中，**永远不要**把 key 提交进仓库。
+
+## 安全与验收状态
+
+| 项目 | 代码 | 自动测试 | 真机/发布验证 |
+| --- | --- | --- | --- |
+| 高德隐私同意门槛 | 已实现 | JVM 测试通过；待仪器测试 | 待验证拒绝、同意与重启路径 |
+| Release 明文 HTTP | 已禁用 | Manifest 静态检查 | 待验证 release 安装包；HTTP Ollama 仅 debug |
+| 密钥存储 | Android Keystore + 旧配置迁移 | JVM 测试通过 | 待验证设备升级/Keystore 失效恢复 |
+| LLM / ASR / TTS 独立配置 | 已实现，兼容旧 LLM 配置回退 | JVM 测试通过 | 待验证三家不同供应商组合 |
+| 本地诊断日志 | 已实现；可在设置中关闭并清除，内容会脱敏 | JVM 测试通过 | 待验证失败场景与关闭后不落盘 |
+
+生产版本只允许 HTTPS。需要连接 HTTP 局域网 Ollama 时，请使用 debug 构建；不要为了它放宽 release 的网络安全策略。
 
 ## M0 真机验收
 

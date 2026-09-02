@@ -7,6 +7,12 @@ import com.qmxz.pilotbot.persona.Persona
 import com.qmxz.pilotbot.persona.PersonaStore
 import com.qmxz.pilotbot.voice.ConversationMode
 
+data class ServiceEndpoint(
+    val baseUrl: String = "",
+    val apiKey: String = "",
+    val model: String = "",
+)
+
 enum class MapProvider {
     AMAP,
     GOOGLE,
@@ -14,22 +20,25 @@ enum class MapProvider {
 }
 
 /** Runtime-editable app config backed by SharedPreferences (no rebuild needed to change keys). */
-class AppConfig(private val prefs: SharedPreferences) {
+class AppConfig(
+    private val prefs: SharedPreferences,
+    private val secrets: SecretStore? = null,
+) {
     constructor(context: Context) : this(
-        context.getSharedPreferences("pilot_bot_config", Context.MODE_PRIVATE)
+        context.getSharedPreferences("pilot_bot_config", Context.MODE_PRIVATE),
+        AndroidKeystoreSecretStore(context),
     )
 
     var endpoint: LlmEndpoint
         get() = LlmEndpoint(
             baseUrl = prefs.getString(KEY_BASE_URL, "").orEmpty(),
-            apiKey = prefs.getString(KEY_API_KEY, "").orEmpty(),
+            apiKey = readSecret(KEY_API_KEY),
             model = prefs.getString(KEY_MODEL, "").orEmpty(),
         )
         set(value) = prefs.edit()
             .putString(KEY_BASE_URL, value.baseUrl)
-            .putString(KEY_API_KEY, value.apiKey)
             .putString(KEY_MODEL, value.model)
-            .apply()
+            .apply().also { writeSecret(KEY_API_KEY, value.apiKey) }
 
     /** The custom persona's own fields (used only when [personaId] is the custom slot). */
     var persona: Persona
@@ -67,12 +76,55 @@ class AppConfig(private val prefs: SharedPreferences) {
         set(value) = prefs.edit().putString(KEY_ASR_BASE_URL, value).apply()
 
     var asrApiKey: String
-        get() = prefs.getString(KEY_ASR_API_KEY, "").orEmpty()
-        set(value) = prefs.edit().putString(KEY_ASR_API_KEY, value).apply()
+        get() = readSecret(KEY_ASR_API_KEY)
+        set(value) = writeSecret(KEY_ASR_API_KEY, value)
 
     var asrModel: String
         get() = prefs.getString(KEY_ASR_MODEL, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_ASR_MODEL, value).apply()
+
+    /** Independent speech-recognition endpoint; falls back to legacy LLM credentials once. */
+    var asrEndpoint: ServiceEndpoint
+        get() {
+            val configured = ServiceEndpoint(asrBaseUrl, asrApiKey, asrModel)
+            return if (configured.baseUrl.isBlank() && configured.apiKey.isBlank()) {
+                endpoint.let { ServiceEndpoint(it.baseUrl, it.apiKey, "") }
+            } else configured
+        }
+        set(value) {
+            asrBaseUrl = value.baseUrl
+            asrApiKey = value.apiKey
+            asrModel = value.model
+        }
+
+    var ttsEndpoint: ServiceEndpoint
+        get() {
+            val configured = ServiceEndpoint(
+                ttsBaseUrl,
+                ttsApiKey,
+                ttsModel,
+            )
+            return if (configured.baseUrl.isBlank() && configured.apiKey.isBlank()) {
+                endpoint.let { ServiceEndpoint(it.baseUrl, it.apiKey, "") }
+            } else configured
+        }
+        set(value) {
+            ttsBaseUrl = value.baseUrl
+            ttsApiKey = value.apiKey
+            ttsModel = value.model
+        }
+
+    var ttsBaseUrl: String
+        get() = prefs.getString(KEY_TTS_BASE_URL, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_TTS_BASE_URL, value).apply()
+
+    var ttsApiKey: String
+        get() = readSecret(KEY_TTS_API_KEY)
+        set(value) = writeSecret(KEY_TTS_API_KEY, value)
+
+    var ttsModel: String
+        get() = prefs.getString(KEY_TTS_MODEL, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_TTS_MODEL, value).apply()
 
     var mapProvider: MapProvider
         get() = runCatching {
@@ -81,8 +133,8 @@ class AppConfig(private val prefs: SharedPreferences) {
         set(value) = prefs.edit().putString(KEY_MAP_PROVIDER, value.name).apply()
 
     var googleMapsApiKey: String
-        get() = prefs.getString(KEY_GOOGLE_MAPS_API_KEY, "").orEmpty()
-        set(value) = prefs.edit().putString(KEY_GOOGLE_MAPS_API_KEY, value).apply()
+        get() = readSecret(KEY_GOOGLE_MAPS_API_KEY)
+        set(value) = writeSecret(KEY_GOOGLE_MAPS_API_KEY, value)
 
     var avatarGender: com.qmxz.pilotbot.avatar.state.AvatarGender
         get() = runCatching {
@@ -121,8 +173,30 @@ class AppConfig(private val prefs: SharedPreferences) {
         const val KEY_GOOGLE_MAPS_API_KEY = "google_maps_api_key"
         const val KEY_AVATAR_GENDER = "avatar_gender"
         const val KEY_TTS_VOICE = "tts_voice"
+        const val KEY_TTS_BASE_URL = "tts_base_url"
+        const val KEY_TTS_API_KEY = "tts_api_key"
+        const val KEY_TTS_MODEL = "tts_model"
         const val DEFAULT_NAME = "小伴"
         const val DEFAULT_TONE = "轻松、活泼、像朋友"
         const val DEFAULT_WAKE_WORD = "小伴"
+    }
+
+    private fun readSecret(key: String): String {
+        secrets?.get(key)?.let { return it }
+        val legacy = prefs.getString(key, "").orEmpty()
+        if (legacy.isNotBlank() && secrets != null) {
+            secrets.put(key, legacy)
+            prefs.edit().remove(key).apply()
+        }
+        return legacy
+    }
+
+    private fun writeSecret(key: String, value: String) {
+        if (secrets != null) {
+            if (value.isBlank()) secrets.remove(key) else secrets.put(key, value)
+            prefs.edit().remove(key).apply()
+        } else {
+            prefs.edit().putString(key, value).apply()
+        }
     }
 }

@@ -33,7 +33,7 @@ class SmartSpeechToText(
         get() = SpeechRecognizer.isRecognitionAvailable(appContext)
 
     val isCloudAsrAvailable: Boolean
-        get() = config.endpoint.apiKey.isNotBlank()
+        get() = config.asrEndpoint.apiKey.isNotBlank()
 
     /** Human-readable status for UI badge. */
     fun status(): String {
@@ -45,7 +45,7 @@ class SmartSpeechToText(
     }
 
     override suspend fun listenOnce(): String {
-        val apiKey = config.endpoint.apiKey.trim()
+        val apiKey = config.asrEndpoint.apiKey.trim()
         if (apiKey.isNotBlank()) {
             try {
                 // Universal Cloud ASR with AudioRecord
@@ -79,7 +79,7 @@ class SmartSpeechToText(
         cancel()
         continuousJob = scope.launch(Dispatchers.IO) {
             while (isActive) {
-                val apiKey = config.endpoint.apiKey.trim()
+                val apiKey = config.asrEndpoint.apiKey.trim()
                 if (apiKey.isNotBlank()) {
                     try {
                         val wavBytes = audioRecorder.recordWav(

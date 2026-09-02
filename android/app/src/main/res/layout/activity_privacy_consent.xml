@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="28dp">
+
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="使用前请阅读隐私说明" android:textSize="24sp" android:textStyle="bold" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="为提供地图、定位和驾车导航功能，副驾伴侣会在你同意后初始化高德地图相关服务，并可能处理设备定位信息。语音、模型和地图密钥仅用于你配置的服务。你可以拒绝；拒绝后应用不会进入导航功能。"
+        android:textSize="16sp" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/privacyPolicyButton"
+        style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content"
+        android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="查看隐私政策全文" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/privacyAcceptButton"
+        android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="28dp"
+        android:text="同意并继续" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/privacyDeclineButton"
+        style="@style/Widget.Material3.Button.TextButton" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:text="不同意并退出" />
+</LinearLayout>

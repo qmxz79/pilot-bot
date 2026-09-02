@@ -16,6 +16,8 @@ class SmartTextToSpeech(
 ) : TextToSpeech {
 
     var onStatusChanged: ((String) -> Unit)? = null
+    /** Called when cloud speech failed and the engine falls back to device TTS. */
+    var onCloudFallback: ((Throwable) -> Unit)? = null
 
     init {
         systemTts.onStatusChanged = {
@@ -42,8 +44,9 @@ class SmartTextToSpeech(
             try {
                 cloudTts.speak(clean)
                 return
-            } catch (_: Exception) {
+            } catch (error: Exception) {
                 // If cloud TTS network fails, gracefully fallback to local system TTS
+                onCloudFallback?.invoke(error)
             }
         }
 

@@ -208,6 +208,38 @@
                 android:maxLines="1" />
         </com.google.android.material.textfield.TextInputLayout>
 
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/diagnosticsSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="保留本地诊断日志（不含 API Key）" />
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginTop="20dp" android:text="语音服务（可选，独立于模型）"
+            android:textAppearance="@style/TextAppearance.Material3.TitleMedium" android:textStyle="bold" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" android:text="留空时会兼容使用旧版模型服务配置；单独填写后，语音服务不会再依赖大模型密钥。"
+            android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
+        <com.google.android.material.textfield.TextInputLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:hint="ASR base_url">
+            <com.google.android.material.textfield.TextInputEditText android:id="@+id/asrBaseUrlInput" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textUri" android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+        <com.google.android.material.textfield.TextInputLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:hint="ASR API Key">
+            <com.google.android.material.textfield.TextInputEditText android:id="@+id/asrApiKeyInput" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textPassword" android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+        <com.google.android.material.textfield.TextInputLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:hint="ASR 模型名（可选）">
+            <com.google.android.material.textfield.TextInputEditText android:id="@+id/asrModelInput" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+        <com.google.android.material.textfield.TextInputLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:hint="TTS base_url">
+            <com.google.android.material.textfield.TextInputEditText android:id="@+id/ttsBaseUrlInput" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textUri" android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+        <com.google.android.material.textfield.TextInputLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:hint="TTS API Key">
+            <com.google.android.material.textfield.TextInputEditText android:id="@+id/ttsApiKeyInput" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textPassword" android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+        <com.google.android.material.textfield.TextInputLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:hint="TTS 模型名（可选）">
+            <com.google.android.material.textfield.TextInputEditText android:id="@+id/ttsModelInput" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+
         <!-- 虚拟副驾数字人形象选择 -->
         <TextView
             android:layout_width="wrap_content"

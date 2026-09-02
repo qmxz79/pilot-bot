@@ -39,12 +39,12 @@ class CloudTextToSpeech(
     private var idleCallback: (() -> Unit)? = null
 
     override val isAvailable: Boolean
-        get() = config.endpoint.apiKey.isNotBlank()
+        get() = config.ttsEndpoint.apiKey.isNotBlank()
 
     override suspend fun speak(text: String) {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
-        val apiKey = config.endpoint.apiKey.trim()
+        val apiKey = config.ttsEndpoint.apiKey.trim()
         if (apiKey.isBlank()) return
 
         val utteranceId = "cloud-tts-${utteranceCounter.incrementAndGet()}"
@@ -64,9 +64,10 @@ class CloudTextToSpeech(
     }
 
     private suspend fun fetchSpeechAudio(text: String, apiKey: String): ByteArray = withContext(Dispatchers.IO) {
-        val baseUrl = config.endpoint.baseUrl.trim()
+        val endpoint = config.ttsEndpoint
+        val baseUrl = endpoint.baseUrl.trim()
         val speechUrl = resolveSpeechUrl(baseUrl)
-        val model = resolveTtsModel(baseUrl)
+        val model = endpoint.model.trim().ifBlank { resolveTtsModel(baseUrl) }
         val voice = resolveTtsVoice(baseUrl, config)
 
         val payload = JSONObject().apply {

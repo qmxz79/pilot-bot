@@ -17,6 +17,8 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import com.qmxz.pilotbot.config.AppConfig
 import com.qmxz.pilotbot.config.MapProvider
+import com.qmxz.pilotbot.config.ServiceEndpoint
+import com.qmxz.pilotbot.diagnostics.AppDiagnostics
 import com.qmxz.pilotbot.llm.LlmEndpoint
 import com.qmxz.pilotbot.persona.Persona
 import com.qmxz.pilotbot.persona.PersonaStore
@@ -28,6 +30,12 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var baseUrl: TextInputEditText
     private lateinit var apiKey: TextInputEditText
     private lateinit var model: TextInputEditText
+    private lateinit var asrBaseUrl: TextInputEditText
+    private lateinit var asrApiKey: TextInputEditText
+    private lateinit var asrModel: TextInputEditText
+    private lateinit var ttsBaseUrl: TextInputEditText
+    private lateinit var ttsApiKey: TextInputEditText
+    private lateinit var ttsModel: TextInputEditText
     private lateinit var avatarPreview: com.qmxz.pilotbot.avatar.view.AvatarView
     private lateinit var avatarRadioGroup: RadioGroup
     private lateinit var avatarFemaleRadio: RadioButton
@@ -42,6 +50,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var mapProviderAmap: View
     private lateinit var mapProviderGoogle: View
     private lateinit var googleMapsApiKey: TextInputEditText
+    private lateinit var diagnosticsSwitch: com.google.android.material.materialswitch.MaterialSwitch
 
     private val presetIds: List<String> =
         listOf(PersonaStore.CUSTOM_ID) + PersonaStore.BUILTINS.map { it.id }
@@ -69,7 +78,7 @@ class SettingsActivity : AppCompatActivity() {
 
         val config = AppConfig(applicationContext)
         findViewById<View>(R.id.asrWarning).visibility =
-            if (config.endpoint.apiKey.isNotBlank() || SpeechRecognizer.isRecognitionAvailable(this)) View.GONE else View.VISIBLE
+            if (config.asrEndpoint.apiKey.isNotBlank() || SpeechRecognizer.isRecognitionAvailable(this)) View.GONE else View.VISIBLE
         avatarPreview = findViewById(R.id.settingsAvatarPreview)
         avatarRadioGroup = findViewById(R.id.avatarRadioGroup)
         avatarFemaleRadio = findViewById(R.id.avatarFemaleRadio)
@@ -77,6 +86,12 @@ class SettingsActivity : AppCompatActivity() {
         baseUrl = findViewById(R.id.baseUrlInput)
         apiKey = findViewById(R.id.apiKeyInput)
         model = findViewById(R.id.modelInput)
+        asrBaseUrl = findViewById(R.id.asrBaseUrlInput)
+        asrApiKey = findViewById(R.id.asrApiKeyInput)
+        asrModel = findViewById(R.id.asrModelInput)
+        ttsBaseUrl = findViewById(R.id.ttsBaseUrlInput)
+        ttsApiKey = findViewById(R.id.ttsApiKeyInput)
+        ttsModel = findViewById(R.id.ttsModelInput)
         personaSpinner = findViewById(R.id.personaSpinner)
         name = findViewById(R.id.nameInput)
         tone = findViewById(R.id.toneInput)
@@ -87,6 +102,9 @@ class SettingsActivity : AppCompatActivity() {
         mapProviderAmap = findViewById(R.id.mapProviderAmap)
         mapProviderGoogle = findViewById(R.id.mapProviderGoogle)
         googleMapsApiKey = findViewById(R.id.googleMapsApiKeyInput)
+        diagnosticsSwitch = findViewById(R.id.diagnosticsSwitch)
+        val diagnostics = AppDiagnostics(applicationContext)
+        diagnosticsSwitch.isChecked = diagnostics.isEnabled()
 
         // Setup Avatar Selection & Live Preview
         avatarPreview.avatarGender = config.avatarGender
@@ -106,9 +124,15 @@ class SettingsActivity : AppCompatActivity() {
 
         config.endpoint.let {
             baseUrl.setText(it.baseUrl)
-            apiKey.setText(it.apiKey)
+            apiKey.hint = secretHint(it.apiKey)
             model.setText(it.model)
         }
+        asrBaseUrl.setText(config.asrBaseUrl)
+        asrApiKey.hint = secretHint(config.asrApiKey)
+        asrModel.setText(config.asrModel)
+        ttsBaseUrl.setText(config.ttsBaseUrl)
+        ttsApiKey.hint = secretHint(config.ttsApiKey)
+        ttsModel.setText(config.ttsModel)
 
         // Quick model preset button click handlers
         findViewById<MaterialButton>(R.id.presetDeepSeekBtn).setOnClickListener {
@@ -174,7 +198,7 @@ class SettingsActivity : AppCompatActivity() {
             MapProvider.GOOGLE, MapProvider.GOOGLE_MAPS -> mapProviderRadioGroup.check(R.id.mapProviderGoogle)
             else -> mapProviderRadioGroup.check(R.id.mapProviderAmap)
         }
-        googleMapsApiKey.setText(config.googleMapsApiKey)
+        googleMapsApiKey.hint = secretHint(config.googleMapsApiKey)
 
         val voiceRadioGroup = findViewById<RadioGroup>(R.id.voiceRadioGroup)
         when (config.ttsVoice) {
@@ -198,8 +222,18 @@ class SettingsActivity : AppCompatActivity() {
             }
             config.endpoint = LlmEndpoint(
                 baseUrl = baseUrl.text?.toString()?.trim().orEmpty(),
-                apiKey = apiKey.text?.toString()?.trim().orEmpty(),
+                apiKey = apiKey.text?.toString()?.trim().orEmpty().ifBlank { config.endpoint.apiKey },
                 model = model.text?.toString()?.trim().orEmpty(),
+            )
+            config.asrEndpoint = ServiceEndpoint(
+                baseUrl = asrBaseUrl.text?.toString()?.trim().orEmpty(),
+                apiKey = asrApiKey.text?.toString()?.trim().orEmpty().ifBlank { config.asrApiKey },
+                model = asrModel.text?.toString()?.trim().orEmpty(),
+            )
+            config.ttsEndpoint = ServiceEndpoint(
+                baseUrl = ttsBaseUrl.text?.toString()?.trim().orEmpty(),
+                apiKey = ttsApiKey.text?.toString()?.trim().orEmpty().ifBlank { config.ttsApiKey },
+                model = ttsModel.text?.toString()?.trim().orEmpty(),
             )
             config.conversationMode = when (modeRadioGroup.checkedRadioButtonId) {
                 R.id.modeContinuous -> ConversationMode.CONTINUOUS
@@ -225,6 +259,8 @@ class SettingsActivity : AppCompatActivity() {
                 else -> "auto"
             }
             config.googleMapsApiKey = googleMapsApiKey.text?.toString()?.trim().orEmpty()
+                .ifBlank { config.googleMapsApiKey }
+            diagnostics.setEnabled(diagnosticsSwitch.isChecked)
             Toast.makeText(this, "设置已保存", Toast.LENGTH_SHORT).show()
             setResult(RESULT_OK)
             finish()
@@ -256,6 +292,9 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
     }
+
+    private fun secretHint(value: String): String =
+        if (value.isBlank()) "未配置" else "已安全保存；留空则保持不变"
 
     /** A built-in preset fills and locks the fields; the custom slot makes them editable. */
     private fun applyPreset(id: String) {

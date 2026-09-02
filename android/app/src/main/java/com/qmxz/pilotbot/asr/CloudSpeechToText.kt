@@ -25,8 +25,9 @@ class CloudSpeechToText(
      * Sends WAV audio bytes to the cloud speech recognition endpoint and returns the transcribed text.
      */
     suspend fun transcribe(wavBytes: ByteArray): String = withContext(Dispatchers.IO) {
-        val asrKey = config.asrApiKey.trim().ifBlank { config.endpoint.apiKey.trim() }
-        val asrBaseUrl = config.asrBaseUrl.trim().ifBlank { config.endpoint.baseUrl.trim() }
+        val endpoint = config.asrEndpoint
+        val asrKey = endpoint.apiKey.trim()
+        val asrBaseUrl = endpoint.baseUrl.trim()
 
         if (asrKey.isBlank()) {
             throw IllegalStateException("未配置 API Key，请在「设置」中填入 API Key 开启语音识别")
@@ -38,7 +39,7 @@ class CloudSpeechToText(
         }
 
         val transcriptionUrl = resolveTranscriptionUrl(asrBaseUrl)
-        val candidateModels = resolveCandidateModels(asrBaseUrl, config.asrModel.trim())
+        val candidateModels = resolveCandidateModels(asrBaseUrl, endpoint.model.trim())
 
         var lastError: Exception? = null
 
