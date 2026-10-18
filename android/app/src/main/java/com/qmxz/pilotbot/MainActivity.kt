@@ -105,6 +105,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var panelBody: LinearLayout
     private lateinit var topBar: View
     private lateinit var bottomDriverCard: View
+    private lateinit var floatingAvatarContainer: View
+    private lateinit var closeAvatarButton: TextView
+    private lateinit var avatarMiniTrigger: MaterialButton
+    private var avatarDismissRunnable: Runnable? = null
 
     private lateinit var mapFullscreenHint: View
     private lateinit var floatingMicButton: ExtendedFloatingActionButton
@@ -234,6 +238,9 @@ class MainActivity : AppCompatActivity() {
         panelBody = findViewById(R.id.panelBody)
         topBar = findViewById(R.id.topBar)
         bottomDriverCard = findViewById(R.id.bottomDriverCard)
+        floatingAvatarContainer = findViewById(R.id.floatingAvatarContainer)
+        closeAvatarButton = findViewById(R.id.closeAvatarButton)
+        avatarMiniTrigger = findViewById(R.id.avatarMiniTrigger)
         mapFullscreenHint = findViewById(R.id.mapFullscreenHint)
         floatingMicButton = findViewById(R.id.floatingMicButton)
 
@@ -247,6 +254,8 @@ class MainActivity : AppCompatActivity() {
                 val imm = getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager
                 imm?.hideSoftInputFromWindow(searchInput.windowToken, 0)
                 searchInput.clearFocus()
+            } else if (floatingAvatarContainer.visibility == View.VISIBLE) {
+                hideFloatingAvatar()
             } else {
                 toggleFullscreenMapMode()
             }
@@ -338,6 +347,18 @@ class MainActivity : AppCompatActivity() {
             val name = if (appConfig.avatarGender == AvatarGender.FEMALE) "心怡" else "修然"
             copilot.speakDirect("嗨！我是副驾$name，随时听你吩咐哦~")
         }
+        closeAvatarButton.setOnClickListener {
+            hideFloatingAvatar()
+        }
+        avatarMiniTrigger.setOnClickListener {
+            if (floatingAvatarContainer.visibility == View.VISIBLE) {
+                hideFloatingAvatar()
+            } else {
+                showFloatingAvatar(autoDismiss = true)
+                val name = if (appConfig.avatarGender == AvatarGender.FEMALE) "心怡" else "修然"
+                copilot.speakDirect("嗨！我是副驾$name，随时听你吩咐哦~")
+            }
+        }
 
         updateBubbleTag()
 
@@ -357,19 +378,30 @@ class MainActivity : AppCompatActivity() {
             llm = OpenAiCompatibleProvider(),
             tts = tts,
             memoryStore = memoryStore,
-            onCopilotText = { text -> renderOnMain { copilotText.text = text } },
+            onCopilotText = { text ->
+                renderOnMain {
+                    showFloatingAvatar(autoDismiss = false)
+                    copilotText.text = text
+                }
+            },
             onCopilotDone = { text ->
                 appendTranscript(getString(R.string.transcript_copilot), text)
                 voiceController.onCopilotText(text)
             },
             onSpeakingStart = {
                 voiceController.onCopilotSpeakingStart()
-                renderOnMain { copilotAvatarView.state = AvatarState.SPEAKING }
+                renderOnMain {
+                    showFloatingAvatar(autoDismiss = false)
+                    copilotAvatarView.state = AvatarState.SPEAKING
+                }
                 lipSyncEngine.startSpeaking()
             },
             onSpeakingEnd = {
                 voiceController.onCopilotSpeakingEnd()
-                renderOnMain { copilotAvatarView.state = AvatarState.IDLE }
+                renderOnMain {
+                    copilotAvatarView.state = AvatarState.IDLE
+                    scheduleAvatarDismiss(3500L)
+                }
                 lipSyncEngine.stopSpeaking()
             },
             onIssue = diagnostics::record,
@@ -383,9 +415,13 @@ class MainActivity : AppCompatActivity() {
                 renderOnMain {
                     updateMicButtonAppearance(listening)
                     if (listening) {
+                        showFloatingAvatar(autoDismiss = false)
                         copilotAvatarView.state = AvatarState.LISTENING
-                    } else if (copilotAvatarView.state == AvatarState.LISTENING) {
-                        copilotAvatarView.state = AvatarState.IDLE
+                    } else {
+                        if (copilotAvatarView.state == AvatarState.LISTENING) {
+                            copilotAvatarView.state = AvatarState.IDLE
+                        }
+                        scheduleAvatarDismiss(3000L)
                     }
                 }
             },
@@ -407,7 +443,12 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, friendlyMsg, Toast.LENGTH_SHORT).show()
                 }
             },
-            onInterrupt = { triggerInterruptionFeedback() },
+            onInterrupt = {
+                renderOnMain {
+                    showFloatingAvatar(autoDismiss = false)
+                    triggerInterruptionFeedback()
+                }
+            },
             onUtterance = { utterance -> renderOnMain { handleUserUtterance(utterance) } },
         )
 
@@ -594,6 +635,7 @@ class MainActivity : AppCompatActivity() {
         val personaName = appConfig.currentPersona().name.ifBlank { defaultName }
         val icon = if (appConfig.avatarGender == AvatarGender.FEMALE) "👩" else "👨"
         copilotBubbleTag.text = "$icon 副驾「$personaName」说："
+        avatarMiniTrigger.text = "✨ $personaName"
     }
 
     private fun refreshVoiceStatus() {
@@ -957,6 +999,8 @@ class MainActivity : AppCompatActivity() {
                 val imm = getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager
                 imm?.hideSoftInputFromWindow(searchInput.windowToken, 0)
                 searchInput.clearFocus()
+            } else if (floatingAvatarContainer.visibility == View.VISIBLE) {
+                hideFloatingAvatar()
             } else {
                 toggleFullscreenMapMode()
             }
@@ -1393,6 +1437,58 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showFloatingAvatar(autoDismiss: Boolean = true) {
+        avatarDismissRunnable?.let { mainHandler.removeCallbacks(it) }
+        avatarDismissRunnable = null
+        if (floatingAvatarContainer.visibility != View.VISIBLE) {
+            floatingAvatarContainer.visibility = View.VISIBLE
+            floatingAvatarContainer.alpha = 0f
+            floatingAvatarContainer.scaleX = 0.85f
+            floatingAvatarContainer.scaleY = 0.85f
+            floatingAvatarContainer.translationY = 30f
+            floatingAvatarContainer.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .translationY(0f)
+                .setDuration(280)
+                .setInterpolator(android.view.animation.DecelerateInterpolator())
+                .start()
+        }
+        if (autoDismiss) {
+            scheduleAvatarDismiss(3500L)
+        }
+    }
+
+    private fun scheduleAvatarDismiss(delayMillis: Long = 3500L) {
+        avatarDismissRunnable?.let { mainHandler.removeCallbacks(it) }
+        val runnable = Runnable {
+            if (destroyed || isFinishing) return@Runnable
+            if (!voiceController.isListening && copilotAvatarView.state != AvatarState.SPEAKING) {
+                hideFloatingAvatar()
+            }
+        }
+        avatarDismissRunnable = runnable
+        mainHandler.postDelayed(runnable, delayMillis)
+    }
+
+    private fun hideFloatingAvatar() {
+        avatarDismissRunnable?.let { mainHandler.removeCallbacks(it) }
+        avatarDismissRunnable = null
+        if (floatingAvatarContainer.visibility == View.VISIBLE) {
+            floatingAvatarContainer.animate()
+                .alpha(0f)
+                .scaleX(0.85f)
+                .scaleY(0.85f)
+                .translationY(30f)
+                .setDuration(250)
+                .withEndAction {
+                    floatingAvatarContainer.visibility = View.GONE
+                }
+                .start()
+        }
+    }
+
     override fun onPause() {
         super.onPause()
         if (::naviView.isInitialized) naviView.onPause()
@@ -1400,6 +1496,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         destroyed = true
+        avatarDismissRunnable?.let { mainHandler.removeCallbacks(it) }
+        avatarDismissRunnable = null
         if (::systemGps.isInitialized) systemGps.stop()
         if (::googleMapEngine.isInitialized) googleMapEngine.onDestroy()
         if (::naviView.isInitialized) naviView.onDestroy()
