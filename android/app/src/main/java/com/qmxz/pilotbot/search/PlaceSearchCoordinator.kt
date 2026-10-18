@@ -18,8 +18,35 @@ class PlaceSearchCoordinator(
             result.exceptionOrNull()?.let(onFailure)
             callback(result)
         }
-        if (isGoogleActive()) google.searchPlaces(keyword, null, reportingCallback)
-        else amap.search(keyword, cityCode(), reportingCallback)
+        if (isGoogleActive()) {
+            google.searchPlaces(keyword, null, reportingCallback)
+        } else {
+            amap.search(keyword, cityCode()) { amapResult ->
+                amapResult.onSuccess { list ->
+                    if (list.isNotEmpty()) {
+                        reportingCallback(Result.success(list))
+                    } else {
+                        // If Amap found nothing, fall back to Google Maps search
+                        google.searchPlaces(keyword, null) { googleResult ->
+                            if (googleResult.isSuccess && googleResult.getOrNull()?.isNotEmpty() == true) {
+                                reportingCallback(googleResult)
+                            } else {
+                                reportingCallback(Result.success(emptyList()))
+                            }
+                        }
+                    }
+                }.onFailure { amapErr ->
+                    // If Amap fails (e.g. invalid signature, quota or overseas error), try Google
+                    google.searchPlaces(keyword, null) { googleResult ->
+                        if (googleResult.isSuccess && googleResult.getOrNull()?.isNotEmpty() == true) {
+                            reportingCallback(googleResult)
+                        } else {
+                            reportingCallback(Result.failure(amapErr))
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fun searchNearby(keyword: String, callback: (Result<List<PlaceResult>>) -> Unit) {

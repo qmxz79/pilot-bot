@@ -114,6 +114,11 @@ class GoogleMapEngine(
         executeJs("if (window.clearRoute) { clearRoute(); }")
     }
 
+    fun showPlace(lat: Double, lng: Double, title: String) {
+        val safeTitle = JSONObject.quote(title)
+        executeJs("if (window.showPlace) { showPlace($lat, $lng, $safeTitle); }")
+    }
+
     private fun executeJs(js: String) {
         mainHandler.post {
             val wv = webView
@@ -377,6 +382,15 @@ class GoogleMapEngine(
                 map.removeLayer(destMarker);
                 destMarker = null;
             }
+        }
+
+        function showPlace(lat, lng, title) {
+            clearRoute();
+            destMarker = L.marker([lat, lng]).addTo(map);
+            if (title) {
+                destMarker.bindPopup('<b>' + title + '</b>').openPopup();
+            }
+            map.setView([lat, lng], 15);
         }
 
         map.on('click', function(e) {

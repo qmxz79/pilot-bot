@@ -35,6 +35,7 @@ import com.amap.api.maps.model.Polyline
 import com.amap.api.maps.model.PolylineOptions
 import com.amap.api.navi.AMapNaviView
 import com.qmxz.pilotbot.map.GoogleMapEngine
+import com.qmxz.pilotbot.map.CoordinateTransform
 import com.qmxz.pilotbot.map.GeoPoint as GlobalGeoPoint
 import android.content.res.ColorStateList
 import com.google.android.material.button.MaterialButton
@@ -130,6 +131,8 @@ class MainActivity : AppCompatActivity() {
     private var googleRoutePolyline: Polyline? = null
     private var locationMarker: Marker? = null
     private val aroundMarkers = mutableListOf<Marker>()
+    private var selectedPlace: PlaceResult? = null
+    private var selectedPlaceMarker: Marker? = null
     private val transcript = StringBuilder()
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -238,7 +241,16 @@ class MainActivity : AppCompatActivity() {
             context = applicationContext,
             apiKeyProvider = { appConfig.googleMapsApiKey },
         )
-        googleMapEngine.bindWebView(googleMapView) { toggleFullscreenMapMode() }
+        googleMapEngine.bindWebView(googleMapView) {
+            if (searchResults.visibility == View.VISIBLE) {
+                searchResults.visibility = View.GONE
+                val imm = getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager
+                imm?.hideSoftInputFromWindow(searchInput.windowToken, 0)
+                searchInput.clearFocus()
+            } else {
+                toggleFullscreenMapMode()
+            }
+        }
 
         // Real-time address auto-complete suggestions on search input typing
         var searchRunnable: Runnable? = null
@@ -262,6 +274,18 @@ class MainActivity : AppCompatActivity() {
             }
             override fun afterTextChanged(s: Editable?) {}
         })
+
+        searchInput.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE) {
+                val imm = getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager
+                imm?.hideSoftInputFromWindow(searchInput.windowToken, 0)
+                searchInput.clearFocus()
+                doSearch()
+                true
+            } else {
+                false
+            }
+        }
 
         // Top action buttons
         findViewById<MaterialButton>(R.id.searchButton).setOnClickListener { doSearch() }
@@ -288,7 +312,14 @@ class MainActivity : AppCompatActivity() {
         micButton.setOnClickListener { onMicPressed() }
         floatingMicButton.setOnClickListener { onMicPressed() }
         mapFullscreenHint.setOnClickListener { toggleFullscreenMapMode() }
-        startButton.setOnClickListener { requestLocationThenStartNavigation() }
+        startButton.setOnClickListener {
+            if (selectedPlace != null) {
+                startNaviTo(selectedPlace!!)
+                selectedPlace = null
+            } else {
+                requestLocationThenStartNavigation()
+            }
+        }
         stopButton.setOnClickListener { stopCurrentNavigation() }
         expandButton.setOnClickListener { togglePanel() }
         findViewById<MaterialButton>(R.id.sendButton).setOnClickListener { sendChatText() }
@@ -445,6 +476,7 @@ class MainActivity : AppCompatActivity() {
 
             // Display Google Map WebView and use device native GPS
             googleMapView.visibility = View.VISIBLE
+            googleMapView.onResume()
             systemGps.start { lat, lng, addr ->
                 renderOnMain {
                     googleMapEngine.updateLocation(lat, lng)
@@ -463,6 +495,7 @@ class MainActivity : AppCompatActivity() {
             // Completely stop native GPS and Google Map updates
             systemGps.stop()
             googleMapEngine.stopNavigation()
+            googleMapView.onPause()
             googleMapView.visibility = View.GONE
 
             // Resume AMap
@@ -845,17 +878,35 @@ class MainActivity : AppCompatActivity() {
 
     private fun onLocateClick() {
         val loc = enRoute.latestLocation()
-        if (loc == null) {
-            statusText.text = getString(R.string.search_waiting_location)
-            return
+        if (loc != null && loc.errorCode == 0 && loc.latitude != 0.0) {
+            updateLocationMarker(loc)
+            aMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(loc.latitude, loc.longitude), 16f))
+            roadNameText.text = loc.address ?: "定位成功"
+        } else {
+            val sysLoc = systemGps.latestLocation()
+            if (sysLoc != null && sysLoc.latitude != 0.0) {
+                val (gcjLat, gcjLng) = CoordinateTransform.wgs84ToGcj02(sysLoc.latitude, sysLoc.longitude)
+                aMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(gcjLat, gcjLng), 16f))
+                roadNameText.text = "GPS 卫星高精定位中"
+            } else {
+                statusText.text = "正在获取精确定位…"
+                enRoute.start(
+                    onAreaChanged = {},
+                    onFirstFix = { fix ->
+                        renderOnMain {
+                            handleLocationFix(fix)
+                            roadNameText.text = fix.address ?: "定位成功"
+                        }
+                    }
+                )
+            }
         }
-        updateLocationMarker(loc)
-        aMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(loc.latitude, loc.longitude), 16f))
-        roadNameText.text = loc.address ?: "定位成功"
     }
 
     private fun updateLocationMarker(location: AMapLocation) {
-        googleMapEngine.updateLocation(location.latitude, location.longitude)
+        if (isGoogleMapsActive()) {
+            googleMapEngine.updateLocation(location.latitude, location.longitude)
+        }
         val map = aMap ?: return
         val latLng = LatLng(location.latitude, location.longitude)
         val existing = locationMarker
@@ -901,7 +952,14 @@ class MainActivity : AppCompatActivity() {
             override fun getInfoContents(marker: Marker): View = makeInfoView(marker)
         })
         map.setOnMapClickListener {
-            toggleFullscreenMapMode()
+            if (searchResults.visibility == View.VISIBLE) {
+                searchResults.visibility = View.GONE
+                val imm = getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager
+                imm?.hideSoftInputFromWindow(searchInput.windowToken, 0)
+                searchInput.clearFocus()
+            } else {
+                toggleFullscreenMapMode()
+            }
         }
     }
 
@@ -931,6 +989,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun doSearch() {
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager
+        imm?.hideSoftInputFromWindow(searchInput.windowToken, 0)
+        searchInput.clearFocus()
         val keyword = searchInput.text?.toString()?.trim().orEmpty()
         if (keyword.isEmpty()) return
         statusText.text = if (isGoogleMapsActive()) "Google 全球搜索中…" else getString(R.string.searching)
@@ -997,9 +1058,37 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     setOnClickListener {
+                        selectedPlace = place
+                        // Update UI: set the search input to the chosen place title and hide keyboard
                         searchInput.setText(place.title)
+                        searchInput.clearFocus()
+                        val imm = getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager
+                        imm?.hideSoftInputFromWindow(searchInput.windowToken, 0)
+
+                        // Hide the search results overlay
                         searchResults.visibility = View.GONE
-                        startNaviTo(place)
+
+                        // Prompt user to start navigation
+                        statusText.text = "已选地点：${place.title}"
+                        roadNameText.text = if (place.snippet.isNotBlank()) place.snippet else "点击「开始导航」即可出发"
+                        copilot.speakDirect("已定位到 ${place.title}，点击开始导航即可出发")
+
+                        // Show place marker on the map and center camera
+                        if (isGoogleMapsActive()) {
+                            googleMapEngine.showPlace(place.lat, place.lng, place.title)
+                        } else {
+                            selectedPlaceMarker?.remove()
+                            val latLng = LatLng(place.lat, place.lng)
+                            selectedPlaceMarker = aMap?.addMarker(
+                                MarkerOptions()
+                                    .position(latLng)
+                                    .title(place.title)
+                                    .snippet(place.snippet)
+                                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
+                            )
+                            selectedPlaceMarker?.showInfoWindow()
+                            aMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15f))
+                        }
                     }
                 }
                 searchResultList.addView(itemView)
@@ -1017,6 +1106,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startNaviTo(place: PlaceResult) {
+        selectedPlaceMarker?.remove()
+        selectedPlaceMarker = null
         if (isGoogleMapsActive()) {
             if (place.lat == 0.0 && place.lng == 0.0) {
                 statusText.text = "正在获取 ${place.title} 的经纬度…"
@@ -1073,13 +1164,39 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val start = enRoute.latestLocation()
-        if (start == null) {
-            statusText.text = getString(R.string.search_waiting_location)
+        val amapLoc = enRoute.latestLocation()
+        val sysLoc = systemGps.latestLocation()
+
+        val startLng: Double
+        val startLat: Double
+
+        if (amapLoc != null && amapLoc.errorCode == 0 && amapLoc.latitude != 0.0 && amapLoc.longitude != 0.0) {
+            startLng = amapLoc.longitude
+            startLat = amapLoc.latitude
+        } else if (sysLoc != null && sysLoc.latitude != 0.0 && sysLoc.longitude != 0.0) {
+            val (gcjLat, gcjLng) = CoordinateTransform.wgs84ToGcj02(sysLoc.latitude, sysLoc.longitude)
+            startLat = gcjLat
+            startLng = gcjLng
+        } else {
+            statusText.text = "正在获取当前精确定位…"
+            copilot.speakDirect("正在获取当前定位，请稍候…")
+            enRoute.start(
+                onAreaChanged = {},
+                onFirstFix = { fix ->
+                    renderOnMain { startNaviTo(place) }
+                },
+                onError = { code, info ->
+                    renderOnMain {
+                        statusText.text = "定位失败($code): $info"
+                        copilot.speakDirect("高德定位获取失败，请检查定位权限或在设置中检查配置")
+                    }
+                }
+            )
             return
         }
+
         beginNavigation(
-            start = GeoPoint(start.longitude, start.latitude),
+            start = GeoPoint(startLng, startLat),
             destination = GeoPoint(place.lng, place.lat),
         )
     }
@@ -1220,6 +1337,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopCurrentNavigation() {
+        selectedPlaceMarker?.remove()
+        selectedPlaceMarker = null
         if (isGoogleMapsActive()) {
             googleMapEngine.stopNavigation()
             googleRoutePolyline?.remove()

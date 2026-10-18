@@ -75,9 +75,9 @@
             camera = new THREE.PerspectiveCamera(36, width / height, 0.1, 50);
             camera.position.set(0, 0.28, 2.15);
 
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'default' });
             renderer.setSize(width, height);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1.0, 2.0));
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1.0, 1.3));
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
             renderer.toneMappingExposure = 1.35;
             renderer.outputEncoding = THREE.sRGBEncoding;
@@ -467,13 +467,23 @@
             container.style.boxShadow = `0 0 14px ${shadowColor}`;
         }
 
-        // 60 FPS 3D Skeletal Animation Loop
+        // Adaptive Framerate 3D Skeletal Animation Loop
         let nextBlinkTime = performance.now() + 2000;
         let isBlinking = false;
         let blinkPhase = 0;
+        let lastFrameTime = 0;
 
         function animate(time) {
             requestAnimationFrame(animate);
+
+            // Adaptive power-saving: 60 FPS when speaking/interacting, 25 FPS when idle
+            const isHighActivity = (currentState === 'speaking' || isBlinking || targetLipOpenness > 0.05 ||
+                Math.abs(headRotX - targetHeadRotX) > 0.02 || Math.abs(headRotY - targetHeadRotY) > 0.02);
+            const minInterval = isHighActivity ? 16 : 40;
+            if (time - lastFrameTime < minInterval) {
+                return;
+            }
+            lastFrameTime = time;
 
             const delta = animationClock.getDelta();
             const activeMixer = avatarMixers[currentGender];

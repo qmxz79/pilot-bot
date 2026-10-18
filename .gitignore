@@ -22,3 +22,7 @@ docs/freeze-fix.md
 docs/dsh-subagent-gpt-patch.yml
 docs/agent-presets/
 subagent-model-fix/
+
+# Release APK binaries (published via GitHub Releases assets, not git blobs)
+*.apk
+releases/*.apk

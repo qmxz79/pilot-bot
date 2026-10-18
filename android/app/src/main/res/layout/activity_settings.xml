@@ -563,6 +563,20 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
+            android:hint="🇨🇳 高德地图 API Key (可选，留空使用内置Key)">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/amapApiKeyInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textPassword"
+                android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:hint="@string/settings_google_maps_api_key_hint">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -572,6 +586,45 @@
                 android:inputType="textPassword"
                 android:maxLines="1" />
         </com.google.android.material.textfield.TextInputLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="🚗 驾车路线规划偏好"
+            android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+            android:textStyle="bold" />
+
+        <RadioGroup
+            android:id="@+id/routePreferenceRadioGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp">
+
+            <RadioButton
+                android:id="@+id/routePrefSpeed"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="⚡ 速度优先 · 智能避堵 (推荐，多路径择优)" />
+
+            <RadioButton
+                android:id="@+id/routePrefHighway"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🛣️ 高速优先 (跨城长途推荐)" />
+
+            <RadioButton
+                android:id="@+id/routePrefNoHighway"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🚶 不走高速 (地面道路优先)" />
+
+            <RadioButton
+                android:id="@+id/routePrefAvoidTolls"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="💰 避免收费 (经济省钱)" />
+        </RadioGroup>
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/saveSettingsButton"

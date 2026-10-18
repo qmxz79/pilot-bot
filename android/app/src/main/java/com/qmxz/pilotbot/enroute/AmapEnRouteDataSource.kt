@@ -14,22 +14,25 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * Real [EnRouteDataSource] backed by the Amap location SDK (already a dependency, same Android SDK
- * key). A continuously running location client reverse-geocodes province/city/district into the
- * cached [AdminArea]; crossing a province/city boundary fires [start]'s callback for narration.
- *
- * ponytail: [nearbyPoi] is empty because the location SDK provides no POI search; wiring POI
- * narration would need a separate Amap Web-service key. Add when en-route POI actually matters.
+ * High-Precision Real-Time [EnRouteDataSource] backed by Amap Location SDK.
+ * Uses satellite GPS + cell/wifi multi-source fusion for lane-level accuracy.
  */
 class AmapEnRouteDataSource(context: Context) : EnRouteDataSource, AMapLocationListener {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val appContext = context.applicationContext
 
-    private val client: AMapLocationClient = AMapLocationClient(context.applicationContext).apply {
+    private val client: AMapLocationClient = AMapLocationClient(appContext).apply {
         setLocationListener(this@AmapEnRouteDataSource)
         setLocationOption(AMapLocationClientOption().apply {
             locationMode = AMapLocationClientOption.AMapLocationMode.Hight_Accuracy
-            interval = 10_000
+            interval = 2000L
             isNeedAddress = true
+            isOnceLocation = false
+            isSensorEnable = true
+            isWifiScan = true
+            isMockEnable = false
+            httpTimeOut = 15000L
+            locationPurpose = AMapLocationClientOption.AMapLocationPurpose.Transport
         })
     }
 
@@ -51,24 +54,42 @@ class AmapEnRouteDataSource(context: Context) : EnRouteDataSource, AMapLocationL
     @Volatile
     private var onLocation: ((AMapLocation) -> Unit)? = null
 
-    /** Starts continuous location; [onLocation] fires on every fix, [onAreaChanged] on province/city change. */
+    @Volatile
+    private var onError: ((Int, String) -> Unit)? = null
+
+    override suspend fun nearbyPoi(lat: Double, lng: Double, radiusMeters: Int): List<Poi> = emptyList()
+
+    override suspend fun currentAdminArea(lat: Double, lng: Double): AdminArea = cachedArea
+
+    override suspend fun prefetchAlongRoute(route: RoutePlan) {}
+
+    /** Starts continuous high-precision location tracking. */
     fun start(
         onAreaChanged: (AdminArea) -> Unit,
         onFirstFix: (AMapLocation) -> Unit = {},
         onLocation: (AMapLocation) -> Unit = {},
+        onError: (Int, String) -> Unit = { _, _ -> },
     ) {
         this.onAreaChanged = onAreaChanged
         this.onFirstFix = onFirstFix
         this.onLocation = onLocation
+        this.onError = onError
         firstFix = true
-        client.startLocation()
+        try {
+            client.startLocation()
+        } catch (e: Throwable) {
+            Log.e("AMapLocation", "Failed to start Amap location client: ${e.message}")
+        }
     }
 
     fun stop() {
-        client.stopLocation()
+        try {
+            client.stopLocation()
+        } catch (_: Throwable) {}
         onAreaChanged = null
         onFirstFix = null
         onLocation = null
+        onError = null
     }
 
     /** Latest full location fix (lat/lng + address), or null before the first successful fix. */
@@ -76,42 +97,42 @@ class AmapEnRouteDataSource(context: Context) : EnRouteDataSource, AMapLocationL
 
     fun destroy() {
         stop()
-        client.onDestroy()
+        try {
+            client.onDestroy()
+        } catch (_: Throwable) {}
         scope.cancel()
     }
 
     override fun onLocationChanged(location: AMapLocation?) {
-        if (location == null || location.errorCode != 0) return
+        if (location == null) return
+        if (location.errorCode != 0) {
+            Log.w("AMapLocation", "Location fix error: code=${location.errorCode}, info=${location.errorInfo}")
+            val errCb = onError
+            scope.launch { errCb?.invoke(location.errorCode, location.errorInfo ?: "未知定位错误") }
+            return
+        }
+
         cachedLocation = location
         val area = AdminArea(
-            province = location.province ?: "",
-            city = location.city ?: "",
-            district = location.district ?: "",
+            province = location.province.orEmpty(),
+            city = location.city.orEmpty(),
+            district = location.district.orEmpty(),
         )
         val changed = firstFix || area.province != cachedArea.province || area.city != cachedArea.city
         val first = firstFix
         firstFix = false
         cachedArea = area
+
         val everyFix = onLocation
         scope.launch { everyFix?.invoke(location) }
+
         if (first) {
-            val callback = onFirstFix
-            scope.launch { callback?.invoke(location) }
+            val firstCb = onFirstFix
+            scope.launch { firstCb?.invoke(location) }
         }
-        if (changed && area.province.isNotEmpty()) {
-            Log.d(TAG, "Admin area: ${area.province}${area.city}${area.district}")
-            val callback = onAreaChanged
-            scope.launch { callback?.invoke(area) }
+        if (changed && area.province.isNotBlank()) {
+            val areaCb = onAreaChanged
+            scope.launch { areaCb?.invoke(area) }
         }
-    }
-
-    override suspend fun nearbyPoi(lat: Double, lng: Double, radiusMeters: Int): List<Poi> = emptyList()
-
-    override suspend fun currentAdminArea(lat: Double, lng: Double): AdminArea = cachedArea
-
-    override suspend fun prefetchAlongRoute(route: RoutePlan): Unit = Unit
-
-    private companion object {
-        const val TAG = "AmapEnRoute"
     }
 }

@@ -132,6 +132,10 @@ class AppConfig(
         }.getOrDefault(MapProvider.AMAP)
         set(value) = prefs.edit().putString(KEY_MAP_PROVIDER, value.name).apply()
 
+    var amapApiKey: String
+        get() = readSecret(KEY_AMAP_API_KEY)
+        set(value) = writeSecret(KEY_AMAP_API_KEY, value)
+
     var googleMapsApiKey: String
         get() = readSecret(KEY_GOOGLE_MAPS_API_KEY)
         set(value) = writeSecret(KEY_GOOGLE_MAPS_API_KEY, value)
@@ -147,6 +151,19 @@ class AppConfig(
     var ttsVoice: String
         get() = prefs.getString(KEY_TTS_VOICE, "auto").orEmpty()
         set(value) = prefs.edit().putString(KEY_TTS_VOICE, value).apply()
+
+    enum class RoutePreference {
+        SPEED_CONGESTION,
+        HIGHWAY_FIRST,
+        NO_HIGHWAY,
+        AVOID_TOLLS,
+    }
+
+    var routePreference: RoutePreference
+        get() = runCatching {
+            RoutePreference.valueOf(prefs.getString(KEY_ROUTE_PREFERENCE, RoutePreference.SPEED_CONGESTION.name).orEmpty())
+        }.getOrDefault(RoutePreference.SPEED_CONGESTION)
+        set(value) = prefs.edit().putString(KEY_ROUTE_PREFERENCE, value.name).apply()
 
     /** True only on the very first launch; flips the flag so it cannot fire twice. */
     fun consumeFirstLaunch(): Boolean {
@@ -170,6 +187,8 @@ class AppConfig(
         const val KEY_WAKE_WORD = "wake_word"
         const val KEY_FIRST_LAUNCH = "first_launch"
         const val KEY_MAP_PROVIDER = "map_provider"
+        const val KEY_ROUTE_PREFERENCE = "route_preference"
+        const val KEY_AMAP_API_KEY = "amap_api_key"
         const val KEY_GOOGLE_MAPS_API_KEY = "google_maps_api_key"
         const val KEY_AVATAR_GENDER = "avatar_gender"
         const val KEY_TTS_VOICE = "tts_voice"

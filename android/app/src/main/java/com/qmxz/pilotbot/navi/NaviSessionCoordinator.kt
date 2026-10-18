@@ -192,7 +192,10 @@ class NaviSessionCoordinator private constructor(context: Context) {
                 }
             }
 
-            val selectedRouteId = result.routeid.firstOrNull()
+            val selectedRouteId = result.routeid.minByOrNull { navi.naviPaths[it]?.allTime ?: Int.MAX_VALUE } ?: result.routeid.firstOrNull()
+            if (selectedRouteId != null) {
+                runCatching { navi.selectMainPathID(selectedRouteId.toLong()) }
+            }
             val path = selectedRouteId?.let { navi.naviPaths[it] } ?: navi.naviPath
             val calculatedRoute = synchronized(routeLock) {
                 activeRoute?.takeIf { routeGeneration == currentGeneration }?.copy(
@@ -356,8 +359,21 @@ class NaviSessionCoordinator private constructor(context: Context) {
 
     private fun GeoPoint.toAmapLatLng(): NaviLatLng = NaviLatLng(latitude, longitude)
 
-    // strategyConvert is an instance method in the V11 SDK (was static before).
-    private fun defaultStrategy(): Int = navi.strategyConvert(true, false, false, false, false)
+    // strategyConvert(congestion, cost, hightspeed, multipleroute, highway)
+    // Multi-route intelligent route calculation based on real-time traffic and user preference
+    private fun defaultStrategy(): Int {
+        val appConfig = com.qmxz.pilotbot.config.AppConfig(appContext)
+        return when (appConfig.routePreference) {
+            com.qmxz.pilotbot.config.AppConfig.RoutePreference.HIGHWAY_FIRST ->
+                navi.strategyConvert(true, false, false, true, true)
+            com.qmxz.pilotbot.config.AppConfig.RoutePreference.NO_HIGHWAY ->
+                navi.strategyConvert(true, false, true, true, false)
+            com.qmxz.pilotbot.config.AppConfig.RoutePreference.AVOID_TOLLS ->
+                navi.strategyConvert(true, true, false, true, false)
+            else ->
+                navi.strategyConvert(true, false, false, true, false)
+        }
+    }
 
     private fun NaviInfo.toNaviState(): NaviState = NaviState(
         remainingDistanceMeters = pathRetainDistance,

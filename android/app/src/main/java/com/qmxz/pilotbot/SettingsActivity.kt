@@ -49,6 +49,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var mapProviderRadioGroup: RadioGroup
     private lateinit var mapProviderAmap: View
     private lateinit var mapProviderGoogle: View
+    private lateinit var amapApiKey: TextInputEditText
     private lateinit var googleMapsApiKey: TextInputEditText
     private lateinit var diagnosticsSwitch: com.google.android.material.materialswitch.MaterialSwitch
 
@@ -101,6 +102,7 @@ class SettingsActivity : AppCompatActivity() {
         mapProviderRadioGroup = findViewById(R.id.mapProviderRadioGroup)
         mapProviderAmap = findViewById(R.id.mapProviderAmap)
         mapProviderGoogle = findViewById(R.id.mapProviderGoogle)
+        amapApiKey = findViewById(R.id.amapApiKeyInput)
         googleMapsApiKey = findViewById(R.id.googleMapsApiKeyInput)
         diagnosticsSwitch = findViewById(R.id.diagnosticsSwitch)
         val diagnostics = AppDiagnostics(applicationContext)
@@ -198,6 +200,7 @@ class SettingsActivity : AppCompatActivity() {
             MapProvider.GOOGLE, MapProvider.GOOGLE_MAPS -> mapProviderRadioGroup.check(R.id.mapProviderGoogle)
             else -> mapProviderRadioGroup.check(R.id.mapProviderAmap)
         }
+        amapApiKey.hint = secretHint(config.amapApiKey)
         googleMapsApiKey.hint = secretHint(config.googleMapsApiKey)
 
         val voiceRadioGroup = findViewById<RadioGroup>(R.id.voiceRadioGroup)
@@ -207,6 +210,14 @@ class SettingsActivity : AppCompatActivity() {
             "voiceSunnyMale" -> voiceRadioGroup.check(R.id.voiceSunnyMaleRadio)
             "voiceCalmMale" -> voiceRadioGroup.check(R.id.voiceCalmMaleRadio)
             else -> voiceRadioGroup.check(R.id.voiceAutoRadio)
+        }
+
+        val routePrefRadioGroup = findViewById<RadioGroup>(R.id.routePreferenceRadioGroup)
+        when (config.routePreference) {
+            AppConfig.RoutePreference.HIGHWAY_FIRST -> routePrefRadioGroup.check(R.id.routePrefHighway)
+            AppConfig.RoutePreference.NO_HIGHWAY -> routePrefRadioGroup.check(R.id.routePrefNoHighway)
+            AppConfig.RoutePreference.AVOID_TOLLS -> routePrefRadioGroup.check(R.id.routePrefAvoidTolls)
+            else -> routePrefRadioGroup.check(R.id.routePrefSpeed)
         }
 
         findViewById<MaterialButton>(R.id.saveSettingsButton).setOnClickListener {
@@ -257,6 +268,20 @@ class SettingsActivity : AppCompatActivity() {
                 R.id.voiceSunnyMaleRadio -> "voiceSunnyMale"
                 R.id.voiceCalmMaleRadio -> "voiceCalmMale"
                 else -> "auto"
+            }
+            config.routePreference = when (routePrefRadioGroup.checkedRadioButtonId) {
+                R.id.routePrefHighway -> AppConfig.RoutePreference.HIGHWAY_FIRST
+                R.id.routePrefNoHighway -> AppConfig.RoutePreference.NO_HIGHWAY
+                R.id.routePrefAvoidTolls -> AppConfig.RoutePreference.AVOID_TOLLS
+                else -> AppConfig.RoutePreference.SPEED_CONGESTION
+            }
+            config.amapApiKey = amapApiKey.text?.toString()?.trim().orEmpty().ifBlank { config.amapApiKey }
+            if (config.amapApiKey.isNotBlank()) {
+                try {
+                    com.amap.api.location.AMapLocationClient.setApiKey(config.amapApiKey)
+                    com.amap.api.maps.MapsInitializer.setApiKey(config.amapApiKey)
+                    com.amap.api.services.core.ServiceSettings.getInstance().setApiKey(config.amapApiKey)
+                } catch (_: Throwable) {}
             }
             config.googleMapsApiKey = googleMapsApiKey.text?.toString()?.trim().orEmpty()
                 .ifBlank { config.googleMapsApiKey }

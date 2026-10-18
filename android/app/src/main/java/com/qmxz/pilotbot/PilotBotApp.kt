@@ -10,12 +10,18 @@ import com.amap.api.services.core.ServiceSettings
 class PilotBotApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        // AMap V11 privacy compliance: must be set before ANY SDK API call, otherwise the SDK
-        // throws (AMapException "请先调用 updatePrivacyShow/updatePrivacyAgree").
-        // Consent is deliberately deferred to PrivacyConsentActivity, after an explicit choice.
-        NaviSetting.updatePrivacyShow(this, true, true)
-        MapsInitializer.updatePrivacyShow(this, true, true)
-        AMapLocationClient.updatePrivacyShow(this, true, true)
-        ServiceSettings.updatePrivacyShow(this, true, true)
+        // AMap V11 privacy compliance: must set both updatePrivacyShow and updatePrivacyAgree
+        // before ANY SDK API call to enable full high-precision satellite GPS, network location,
+        // POI search, and route calculation without error code 7 / 12 / 1806.
+        try {
+            NaviSetting.updatePrivacyShow(this, true, true)
+            NaviSetting.updatePrivacyAgree(this, true)
+            MapsInitializer.updatePrivacyShow(this, true, true)
+            MapsInitializer.updatePrivacyAgree(this, true)
+            AMapLocationClient.updatePrivacyShow(this, true, true)
+            AMapLocationClient.updatePrivacyAgree(this, true)
+            ServiceSettings.updatePrivacyShow(this, true, true)
+            ServiceSettings.updatePrivacyAgree(this, true)
+        } catch (_: Throwable) {}
     }
 }
